@@ -1,12 +1,12 @@
 import { Service, signal } from '@angular/core';
-import { MarketTick } from '../models/market-tick.model';
+import { MarketInstrument } from '../models/market-instrument.model';
 
 @Service()
 export class MarketService {
 
-    private readonly _marketTicks = signal<MarketTick[]>([
+    private readonly _marketInstrument = signal<MarketInstrument[]>([
         {
-            symbol: 'RELIANCE',
+            symbol: 'XAU/USD',
             price: 150.25,
             change: 2.5,
             changePercent: 1.69,
@@ -20,7 +20,7 @@ export class MarketService {
             volume: 500000
         },
         {
-            symbol: 'INFY',
+            symbol: 'BTC/USD',
             price: 3500.10,
             change: 20.5,
             changePercent: 0.59,
@@ -28,6 +28,6 @@ export class MarketService {
         }
     ]);
 
-    readonly marketTicks = this._marketTicks.asReadonly();
+    readonly marketInstruments = this._marketInstrument.asReadonly();
 
 }

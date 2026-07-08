@@ -1,8 +1,8 @@
-<table mat-table [dataSource]="marketTicks()">
+<table mat-table [dataSource]="marketInstruments()">
 
     <ng-container matColumnDef="symbol">
         <th mat-header-cell *matHeaderCellDef> Symbol </th>
-        <td mat-cell *matCellDef="let element">
+        <td mat-cell *matCellDef="let element" class="symbol">
             {{ element.symbol }}
         </td>
     </ng-container>
@@ -10,28 +10,30 @@
     <ng-container matColumnDef="price">
         <th mat-header-cell *matHeaderCellDef> Price </th>
         <td mat-cell *matCellDef="let element">
-            {{ element.price }}
+            {{ element.price | currency:'USD':'symbol':'1.2-2' }}
         </td>
     </ng-container>
 
     <ng-container matColumnDef="change">
         <th mat-header-cell *matHeaderCellDef> Change </th>
-        <td mat-cell *matCellDef="let element">
-            {{ element.change }}
+        <td mat-cell *matCellDef="let element" [class.positive]="element.change > 0"
+            [class.negative]="element.change < 0">
+            {{ element.change > 0 ? '+' : '' }}{{ element.change | number:'1.2-2'}}
         </td>
     </ng-container>
 
     <ng-container matColumnDef="changePercent">
-        <th mat-header-cell *matHeaderCellDef> % </th>
-        <td mat-cell *matCellDef="let element">
-            {{ element.changePercent }}
+        <th mat-header-cell *matHeaderCellDef>Change % </th>
+        <td mat-cell *matCellDef="let element" [class.positive]="element.changePercent > 0"
+            [class.negative]="element.changePercent < 0">
+            {{ element.changePercent > 0 ? '+' : '' }}{{ element.changePercent | number:'1.2-2'}}%
         </td>
     </ng-container>
 
     <ng-container matColumnDef="volume">
         <th mat-header-cell *matHeaderCellDef> Volume </th>
         <td mat-cell *matCellDef="let element">
-            {{ element.volume }}
+            {{ element.volume | number }}
         </td>
     </ng-container>
 

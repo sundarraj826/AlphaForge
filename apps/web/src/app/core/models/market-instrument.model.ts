@@ -1,7 +1,7 @@
-export interface MarketTick {
+export interface MarketInstrument {
     symbol: string;
     price: number;
     change: number;
     changePercent: number;
-    volume: number;
+    volume?: number;
 }
