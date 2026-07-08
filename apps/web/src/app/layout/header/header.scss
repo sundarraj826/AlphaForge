@@ -1,20 +1,11 @@
-.header {
+header {
     height: 64px;
-    background: #1e293b;
-    color: white;
-
     display: flex;
-    justify-content: space-between;
     align-items: center;
-
-    padding: 0 24px;
-}
-
-.logo {
+    padding: 0 var(--af-space-5);
+    background: var(--af-primary);
+    color: white;
     font-size: 22px;
-    font-weight: 700;
-}
+    font-weight: 600;
 
-.user {
-    font-size: 14px;
 }

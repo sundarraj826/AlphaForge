@@ -1,0 +1,15 @@
+<div class="dashboard-grid">
+
+    <app-summary-card title="Total Capital" [value]="'₹' + summary().totalCapital.toLocaleString('en-IN')">
+    </app-summary-card>
+
+    <app-summary-card title="Today's P&L" [value]="'₹' + summary().todaysPnl.toLocaleString('en-IN')">>
+    </app-summary-card>
+
+    <app-summary-card title="Open Positions" [value]="summary().openPositions.toString()">>
+    </app-summary-card>
+
+    <app-summary-card title="Win Rate" [value]="summary().winRate + '%'">
+    </app-summary-card>
+
+</div>

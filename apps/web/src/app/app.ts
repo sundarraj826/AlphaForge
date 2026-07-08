@@ -1,10 +1,10 @@
 import { Component, signal } from '@angular/core';
-import { Header } from './layout/header/header';
+import { Shell } from './layout/shell/shell';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [Header],
+  imports: [Shell],
   templateUrl: './app.html',
   styleUrls: ['./app.scss'],
 })
