@@ -4,4 +4,5 @@ export interface MarketInstrument {
     change: number;
     changePercent: number;
     volume?: number;
+    currencyCode?: string;
 }

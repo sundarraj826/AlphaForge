@@ -33,3 +33,11 @@ body {
   margin: 0;
   height: 100%;
 }
+
+.positive {
+  color: var(--af-success);
+}
+
+.negative {
+  color: var(--af-danger);
+}
