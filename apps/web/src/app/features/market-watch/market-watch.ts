@@ -1,4 +1,4 @@
-import { Component, inject, Pipe } from '@angular/core';
+import { Component, inject } from '@angular/core';
 import { MatTableModule } from '@angular/material/table';
 import { MarketService } from '../../core/services/market';
 import { DecimalPipe, CurrencyPipe } from '@angular/common';
@@ -15,5 +15,11 @@ export class MarketWatch {
 
   readonly marketInstruments = this.marketService.marketInstruments;
 
-  displayedColumns: string[] = ['symbol', 'price', 'change', 'changePercent', 'volume'];
+  displayedColumns: string[] = [
+    'symbol',
+    'price',
+    'change',
+    'changePercent',
+    'volume'
+  ];
 }

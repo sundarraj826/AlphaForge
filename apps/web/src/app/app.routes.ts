@@ -3,6 +3,7 @@ import { DashboardHome } from './features/dashboard/dashboard-home/dashboard-hom
 import { MarketWatch } from './features/market-watch/market-watch';
 import { Portfolio } from './features/portfolio/portfolio';
 import { StrategyHome } from './features/strategy/strategy-home';
+import { StrategyBuilder } from './features/strategy/builder/strategy-builder/strategy-builder';
 
 export const routes: Routes = [
     {
@@ -25,5 +26,9 @@ export const routes: Routes = [
     {
         path: 'strategy',
         component: StrategyHome
+    },
+    {
+        path: 'strategy/new',
+        component: StrategyBuilder
     }
 ];
