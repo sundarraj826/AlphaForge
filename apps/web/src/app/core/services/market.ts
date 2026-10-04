@@ -1,4 +1,4 @@
-import { Service, signal } from '@angular/core';
+import { OnInit, Service, signal } from '@angular/core';
 import { MarketInstrument } from '../models/market-instrument.model';
 
 @Service()

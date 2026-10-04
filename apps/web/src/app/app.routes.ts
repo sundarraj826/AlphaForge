@@ -4,6 +4,7 @@ import { MarketWatch } from './features/market-watch/market-watch';
 import { Portfolio } from './features/portfolio/portfolio';
 import { StrategyHome } from './features/strategy/strategy-home';
 import { StrategyBuilder } from './features/strategy/builder/strategy-builder/strategy-builder';
+import { BacktestHome } from './features/backtest/backtest';
 
 export const routes: Routes = [
     {
@@ -30,5 +31,9 @@ export const routes: Routes = [
     {
         path: 'strategy/new',
         component: StrategyBuilder
+    },
+    {
+        path: 'backtest',
+        component: BacktestHome
     }
 ];
