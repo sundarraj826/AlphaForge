@@ -170,6 +170,9 @@ describe('BacktestingService', () => {
     expect(result.losingTrades).toBe(1);
     expect(result.winRate).toBe(0);
     expect(result.totalProfitLoss).toBe(-7);
+
+    expect(result.maxDrawdown).toBe(7);
+    expect(result.maxDrawdownPercent).toBeCloseTo(0.007);
   });
 
   it('should execute multiple trades and calculate the overall result', () => {
@@ -237,6 +240,12 @@ describe('BacktestingService', () => {
     expect(result.losingTrades).toBe(0);
     expect(result.winRate).toBe(100);
     expect(result.totalProfitLoss).toBe(7);
+
+    expect(result.equityCurve).toEqual([
+      100000,
+      100006,
+      100007
+    ])
 
     expect(result.trades).toHaveLength(2);
 
@@ -566,6 +575,7 @@ describe('BacktestingService', () => {
       strategy,
       candles,
       1,
+      100000,
       0.1
     );
 
@@ -633,6 +643,7 @@ describe('BacktestingService', () => {
       strategy,
       candles,
       1,
+      100000,
       0,
       0.1
     );
@@ -698,6 +709,7 @@ describe('BacktestingService', () => {
       strategy,
       candles,
       1,
+      100000,
       0.1,
       0
     );
@@ -815,6 +827,7 @@ describe('BacktestingService', () => {
       strategy,
       candles,
       1,
+      100000,
       0,
       0,
       3,
@@ -823,5 +836,124 @@ describe('BacktestingService', () => {
 
     expect(result.totalTrades).toBe(1);
     expect(result.totalProfitLoss).toBe(4);
+  });
+
+  it('should calculate maximum drawdown', () => {
+    const strategyService = TestBed.inject(StrategyService);
+    const strategy = strategyService.strategies()[0];
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 100,
+        high: 100,
+        low: 100,
+        close: 100
+      },
+      {
+        timestamp: 2,
+        open: 100,
+        high: 106,
+        low: 100,
+        close: 106
+      },
+      {
+        timestamp: 3,
+        open: 106,
+        high: 106,
+        low: 101,
+        close: 101
+      },
+      {
+        timestamp: 4,
+        open: 101,
+        high: 110,
+        low: 101,
+        close: 110
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      1,
+      100000
+    );
+
+    expect(result.maxDrawdown).toBeGreaterThanOrEqual(0);
+    expect(result.maxDrawdownPercent).toBeGreaterThanOrEqual(0);
+  });
+
+  it('should calculate maximum drawdown from an equity decline', () => {
+    const strategy: Strategy = {
+      id: '1',
+      name: 'Drawdown Strategy',
+      instrument: 'XAU/USD',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        {
+          indicator: 'Price',
+          operator: '>',
+          value: 100
+        }
+      ],
+      exitConditions: [
+        {
+          indicator: 'Price',
+          operator: '<',
+          value: 105
+        }
+      ]
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 99,
+        high: 101,
+        low: 98,
+        close: 101
+      },
+      {
+        timestamp: 2,
+        open: 101,
+        high: 105,
+        low: 103,
+        close: 104
+      },
+      {
+        timestamp: 3,
+        open: 104,
+        high: 107,
+        low: 103,
+        close: 106
+      },
+      {
+        timestamp: 4,
+        open: 106,
+        high: 107,
+        low: 98,
+        close: 99
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles
+    );
+
+    expect(result.totalTrades).toBe(2);
+    expect(result.winningTrades).toBe(1);
+    expect(result.losingTrades).toBe(1);
+
+    expect(result.equityCurve).toEqual([
+      100000,
+      100003,
+      99996
+    ]);
+
+    expect(result.maxDrawdown).toBe(7);
+    expect(result.maxDrawdownPercent).toBeCloseTo(0.007);
   });
 });

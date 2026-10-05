@@ -6,16 +6,19 @@ import { Strategy } from '../models/strategy.model';
 import { BacktestTrade } from '../models/backtest-trade.model';
 
 import { StrategyService } from './strategy';
+import { TradingCostService } from './trading-cost';
 
 @Service()
 export class BacktestingService {
 
-    private readonly strategyService = inject(StrategyService);
+    readonly strategyService = inject(StrategyService);
+    readonly tradingCostService = inject(TradingCostService);
 
     runBacktest(
         strategy: Strategy,
         candles: MarketCandle[],
         quantity: number = 1,
+        initialCapital: number = 100000,
         feePercent: number = 0,
         slippagePercent: number = 0,
         startTimestamp?: number,
@@ -51,6 +54,14 @@ export class BacktestingService {
         let losingTrades = 0;
         let totalProfitLoss = 0;
         let totalFees = 0;
+        let finalCapital = initialCapital;
+
+        const equityCurve: number[] = [initialCapital];
+        const drawdownCurve: number[] = [];
+
+        let peakEquity = initialCapital;
+        let maxDrawdown = 0;
+        let maxDrawdownPercent = 0;
 
         const trades: BacktestTrade[] = [];
 
@@ -117,6 +128,7 @@ export class BacktestingService {
 
                     totalTrades++;
                     totalProfitLoss += profitLoss;
+                    equityCurve.push(initialCapital + totalProfitLoss);
 
                     if (profitLoss > 0) {
                         winningTrades++;
@@ -177,6 +189,7 @@ export class BacktestingService {
 
                     totalTrades++;
                     totalProfitLoss += profitLoss;
+                    equityCurve.push(initialCapital + totalProfitLoss);
 
                     if (profitLoss > 0) {
                         winningTrades++;
@@ -226,6 +239,7 @@ export class BacktestingService {
 
                     totalTrades++;
                     totalProfitLoss += profitLoss;
+                    equityCurve.push(initialCapital + totalProfitLoss);
 
                     if (profitLoss > 0) {
                         winningTrades++;
@@ -258,6 +272,35 @@ export class BacktestingService {
                     ? Infinity
                     : 0;
 
+        finalCapital = initialCapital + totalProfitLoss;
+
+        for (const equity of equityCurve) {
+            if (equity > peakEquity) {
+                peakEquity = equity;
+            }
+
+            const drawdown = peakEquity - equity;
+
+            if (drawdown > maxDrawdown) {
+                maxDrawdown = drawdown;
+
+                maxDrawdownPercent =
+                    peakEquity > 0
+                        ? (drawdown / peakEquity) * 100
+                        : 0;
+            }
+        }
+
+        let peak = initialCapital;
+
+        for (const equity of equityCurve) {
+            if (equity > peak) {
+                peak = equity;
+            }
+
+            drawdownCurve.push(peak - equity);
+        }
+
         return {
             totalTrades,
             winningTrades,
@@ -268,6 +311,12 @@ export class BacktestingService {
             profitFactor,
             totalProfitLoss,
             totalFees,
+            initialCapital,
+            finalCapital,
+            equityCurve,
+            drawdownCurve,
+            maxDrawdown,
+            maxDrawdownPercent,
             trades
         };
     }

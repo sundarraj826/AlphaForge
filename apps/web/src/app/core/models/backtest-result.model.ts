@@ -10,5 +10,13 @@ export interface BacktestResult {
     profitFactor: number;
     totalProfitLoss: number;
     totalFees: number;
+    initialCapital: number;
+    finalCapital: number;
+    equityCurve: number[];
+
+    drawdownCurve: number[];
+    maxDrawdown: number;
+    maxDrawdownPercent: number;
+
     trades: BacktestTrade[];
 }
