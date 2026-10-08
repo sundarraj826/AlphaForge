@@ -8,6 +8,7 @@ export interface Strategy {
     instrument: string;
     timeframe: string;
     status: 'Active' | 'Inactive';
+    type?: 'GENERIC' | 'INTRADAY';
     entryConditions?: EntryCondition[];
     exitConditions?: ExitCondition[];
     riskManagement?: RiskManagement;

@@ -37,6 +37,29 @@ describe('StrategyService', () => {
     }
   ];
 
+  const intradayStrategy: Strategy = {
+    id: 'intraday-test',
+    name: 'NIFTY Intraday Trend',
+    instrument: 'NIFTY50',
+    timeframe: '15m',
+    status: 'Active',
+    type: 'INTRADAY',
+    riskManagement: {
+      riskPerTrade: 0.5,
+      stopLossPercent: 0,
+      takeProfitPercent: 0,
+      maxDailyLossPercent: 1.5,
+      maxOpenTrades: 1,
+      emaFastPeriod: 20,
+      emaSlowPeriod: 50,
+      volumePeriod: 20,
+      volumeMultiplier: 1.2,
+      atrPeriod: 14,
+      atrMultiplier: 1.5,
+      rewardRiskRatio: 2
+    }
+  };
+
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [StrategyService, IndicatorService]
@@ -539,5 +562,272 @@ describe('StrategyService', () => {
     );
 
     expect(result).toBe('SELL');
+  });
+
+  it('should return true when fast EMA is above slow EMA', () => {
+    const candles: MarketCandle[] = [
+      { timestamp: 1, open: 100, high: 105, low: 95, close: 100, volume: 1000 },
+      { timestamp: 2, open: 100, high: 110, low: 98, close: 108, volume: 1100 },
+      { timestamp: 3, open: 108, high: 115, low: 105, close: 112, volume: 1200 },
+      { timestamp: 4, open: 112, high: 120, low: 110, close: 118, volume: 1300 },
+      { timestamp: 5, open: 118, high: 125, low: 115, close: 123, volume: 1400 }
+    ];
+
+    const result = service.evaluateEmaTrend(
+      candles,
+      2,
+      4
+    );
+
+    expect(result).toBe(true);
+  });
+
+  it('should return false when there are not enough candles', () => {
+    const candles: MarketCandle[] = [
+      { timestamp: 1, open: 100, high: 105, low: 95, close: 100, volume: 1000 },
+      { timestamp: 2, open: 100, high: 105, low: 95, close: 101, volume: 1000 }
+    ];
+
+    const result = service.evaluateEmaTrend(
+      candles,
+      2,
+      4
+    );
+
+    expect(result).toBe(false);
+  });
+
+  it('should return true when EMA trend and price conditions are satisfied', () => {
+    vi.spyOn(service, 'evaluateEmaTrend')
+      .mockReturnValue(true);
+
+    vi.spyOn(service, 'evaluatePriceVsEma')
+      .mockReturnValue('BUY');
+
+    const result = service.evaluateTrendEntry(candles);
+
+    expect(result).toBe(true);
+  });
+
+  it('should return false when EMA trend condition fails', () => {
+    vi.spyOn(service, 'evaluateEmaTrend')
+      .mockReturnValue(false);
+
+    const result = service.evaluateTrendEntry(candles);
+
+    expect(result).toBe(false);
+  });
+
+  it('should return true when candle is bullish', () => {
+    const candle: MarketCandle = {
+      timestamp: 1,
+      open: 100,
+      high: 110,
+      low: 99,
+      close: 105,
+      volume: 1000
+    };
+
+    const result = service.isBullishCandle(candle);
+
+    expect(result).toBe(true);
+  });
+
+  it('should return false when candle is bearish', () => {
+    const candle: MarketCandle = {
+      timestamp: 1,
+      open: 105,
+      high: 110,
+      low: 99,
+      close: 100,
+      volume: 1000
+    };
+
+    const result = service.isBullishCandle(candle);
+
+    expect(result).toBe(false);
+  });
+
+  it('should return true when current volume is at least 1.2 times average volume', () => {
+    const candles: MarketCandle[] = Array.from(
+      { length: 21 },
+      (_, index) => ({
+        timestamp: index + 1,
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 102,
+        volume: index === 20 ? 1200 : 1000
+      })
+    );
+
+    const result =
+      service.isVolumeConfirmed(candles);
+
+    expect(result).toBe(true);
+  });
+
+  it('should return false when current volume is below 1.2 times average volume', () => {
+    const candles: MarketCandle[] = Array.from(
+      { length: 21 },
+      (_, index) => ({
+        timestamp: index + 1,
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 102,
+        volume: index === 20 ? 1100 : 1000
+      })
+    );
+
+    const result =
+      service.isVolumeConfirmed(candles);
+
+    expect(result).toBe(false);
+  });
+
+  it('should return false when there are not enough candles for volume confirmation', () => {
+    const candles: MarketCandle[] = Array.from(
+      { length: 20 },
+      (_, index) => ({
+        timestamp: index + 1,
+        open: 100,
+        high: 105,
+        low: 95,
+        close: 102,
+        volume: 1000
+      })
+    );
+
+    const result =
+      service.isVolumeConfirmed(candles);
+
+    expect(result).toBe(false);
+  });
+
+  it('should calculate ATR based stop loss', () => {
+    const result = service.calculateAtrStopLoss(
+      1000,
+      10
+    );
+
+    expect(result).toBe(985);
+  });
+
+  it('should return 0 for invalid ATR stop loss inputs', () => {
+    const result = service.calculateAtrStopLoss(
+      1000,
+      0
+    );
+
+    expect(result).toBe(0);
+  });
+
+  it('should calculate take profit at 2R', () => {
+    const result = service.calculateTakeProfit(
+      1000,
+      985
+    );
+
+    expect(result).toBe(1030);
+  });
+
+  it('should return 0 when stop loss is above entry price', () => {
+    const result = service.calculateTakeProfit(
+      1000,
+      1010
+    );
+
+    expect(result).toBe(0);
+  });
+
+  it('should return true when all intraday entry conditions are satisfied', () => {
+    vi.spyOn(service, 'evaluateEmaTrend')
+      .mockReturnValue(true);
+
+    vi.spyOn(service, 'evaluatePriceVsEma')
+      .mockReturnValue('BUY');
+
+    vi.spyOn(service, 'isBullishCandle')
+      .mockReturnValue(true);
+
+    vi.spyOn(service, 'isVolumeConfirmed')
+      .mockReturnValue(true);
+
+    const result =
+      service.evaluateIntradayEntry(intradayStrategy, candles);
+
+    expect(result).toBe(true);
+  });
+
+  it('should return false when intraday trend condition fails', () => {
+    vi.spyOn(service, 'evaluateEmaTrend')
+      .mockReturnValue(false);
+
+    const result =
+      service.evaluateIntradayEntry(intradayStrategy, candles);
+
+    expect(result).toBe(false);
+  });
+
+  it('should return BUY when intraday strategy entry conditions are satisfied', () => {
+    vi.spyOn(service, 'evaluateIntradayEntry')
+      .mockReturnValue(true);
+
+    const strategy: Strategy = {
+      id: 'intraday-test',
+      name: 'NIFTY Intraday Trend',
+      instrument: 'NIFTY50',
+      timeframe: '15m',
+      status: 'Active',
+      type: 'INTRADAY'
+    };
+
+    const result = service.evaluateStrategy(
+      strategy,
+      candles,
+      'NONE'
+    );
+
+    expect(result).toBe('BUY');
+  });
+
+  it('should return WAIT when intraday strategy entry conditions are not satisfied', () => {
+    vi.spyOn(service, 'evaluateIntradayEntry')
+      .mockReturnValue(false);
+
+    const strategy: Strategy = {
+      id: 'intraday-test',
+      name: 'NIFTY Intraday Trend',
+      instrument: 'NIFTY50',
+      timeframe: '15m',
+      status: 'Active',
+      type: 'INTRADAY'
+    };
+
+    const result = service.evaluateStrategy(
+      strategy,
+      candles,
+      'NONE'
+    );
+
+    expect(result).toBe('WAIT');
+  });
+
+  it('should return intraday trade setup when entry conditions are satisfied', () => {
+    vi.spyOn(service, 'evaluateIntradayEntry')
+      .mockReturnValue(true);
+
+    vi.spyOn(indicatorService, 'calculateAtr')
+      .mockReturnValue(10);
+
+    const result =
+      service.evaluateIntradaySetup(intradayStrategy, candles);
+
+    expect(result).toEqual({
+      entryPrice: 101,
+      stopLossPrice: 86,
+      takeProfitPrice: 131
+    });
   });
 });

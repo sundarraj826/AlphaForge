@@ -4,4 +4,12 @@ export interface RiskManagement {
     takeProfitPercent: number;
     maxDailyLossPercent: number;
     maxOpenTrades: number;
+
+    emaFastPeriod?: number;
+    emaSlowPeriod?: number;
+    volumePeriod?: number;
+    volumeMultiplier?: number;
+    atrPeriod?: number;
+    atrMultiplier?: number;
+    rewardRiskRatio?: number;
 }

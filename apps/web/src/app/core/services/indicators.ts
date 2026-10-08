@@ -56,6 +56,73 @@ export class IndicatorService {
             : null;
     }
 
+    calculateAtr(
+        candles: MarketCandle[],
+        period: number
+    ): number | null {
+        if (
+            candles.length < period + 1 ||
+            period <= 0
+        ) {
+            return null;
+        }
+
+        const trueRanges: number[] = [];
+
+        for (let i = 1; i < candles.length; i++) {
+            const currentCandle = candles[i];
+            const previousCandle = candles[i - 1];
+
+            const trueRange = Math.max(
+                currentCandle.high - currentCandle.low,
+                Math.abs(
+                    currentCandle.high - previousCandle.close
+                ),
+                Math.abs(
+                    currentCandle.low - previousCandle.close
+                )
+            );
+
+            trueRanges.push(trueRange);
+        }
+
+        if (trueRanges.length < period) {
+            return null;
+        }
+
+        const recentTrueRanges =
+            trueRanges.slice(-period);
+
+        const atr =
+            recentTrueRanges.reduce(
+                (sum, trueRange) => sum + trueRange,
+                0
+            ) / period;
+
+        return atr;
+    }
+
+    calculateAverageVolume(
+        candles: MarketCandle[],
+        period: number
+    ): number | null {
+        if (
+            period <= 0 ||
+            candles.length < period
+        ) {
+            return null;
+        }
+
+        const recentCandles = candles.slice(-period);
+
+        const totalVolume = recentCandles.reduce(
+            (sum, candle) => sum + (candle.volume ?? 0),
+            0
+        );
+
+        return totalVolume / period;
+    }
+
     // This method checks if the current price is above the latest EMA value.
     isPriceAboveEma(
         candles: MarketCandle[],

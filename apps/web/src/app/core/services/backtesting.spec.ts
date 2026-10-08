@@ -107,7 +107,7 @@ describe('BacktestingService', () => {
     expect(result.winningTrades).toBe(1);
     expect(result.losingTrades).toBe(0);
     expect(result.winRate).toBe(100);
-    expect(result.totalProfitLoss).toBe(12);
+    expect(result.totalProfitLoss).toBeCloseTo(11.831115104, 8);
 
     expect(result.trades).toHaveLength(1);
 
@@ -115,7 +115,7 @@ describe('BacktestingService', () => {
       entryPrice: 101,
       exitPrice: 107,
       quantity: 2,
-      profitLoss: 12
+      profitLoss: 11.831115104
     });
   });
 
@@ -169,9 +169,9 @@ describe('BacktestingService', () => {
     expect(result.winningTrades).toBe(0);
     expect(result.losingTrades).toBe(1);
     expect(result.winRate).toBe(0);
-    expect(result.totalProfitLoss).toBe(-7);
+    expect(result.totalProfitLoss).toBeCloseTo(-7.07935417, 8);
 
-    expect(result.maxDrawdown).toBe(7);
+    expect(result.maxDrawdown).toBeCloseTo(7.07935417, 8);
     expect(result.maxDrawdownPercent).toBeCloseTo(0.007);
   });
 
@@ -239,13 +239,13 @@ describe('BacktestingService', () => {
     expect(result.winningTrades).toBe(2);
     expect(result.losingTrades).toBe(0);
     expect(result.winRate).toBe(100);
-    expect(result.totalProfitLoss).toBe(7);
+    expect(result.totalProfitLoss).toBeCloseTo(6.82738245, 8);
 
     expect(result.equityCurve).toEqual([
       100000,
-      100006,
-      100007
-    ])
+      100005.915557552,
+      100006.82738245
+    ]);
 
     expect(result.trades).toHaveLength(2);
 
@@ -253,14 +253,14 @@ describe('BacktestingService', () => {
       entryPrice: 101,
       exitPrice: 107,
       quantity: 1,
-      profitLoss: 6
+      profitLoss: 5.915557552
     });
 
     expect(result.trades[1]).toEqual({
       entryPrice: 108,
       exitPrice: 109,
       quantity: 1,
-      profitLoss: 1
+      profitLoss: 0.911824898
     });
   });
 
@@ -360,13 +360,13 @@ describe('BacktestingService', () => {
     expect(result.totalTrades).toBe(1);
     expect(result.winningTrades).toBe(0);
     expect(result.losingTrades).toBe(1);
-    expect(result.totalProfitLoss).toBe(-2);
+    expect(result.totalProfitLoss).toBeCloseTo(-2.080498388, 8);
 
     expect(result.trades[0]).toEqual({
       entryPrice: 100,
       exitPrice: 98,
       quantity: 1,
-      profitLoss: -2
+      profitLoss: -2.080498388
     });
   });
 
@@ -421,13 +421,13 @@ describe('BacktestingService', () => {
     expect(result.winningTrades).toBe(1);
     expect(result.losingTrades).toBe(0);
     expect(result.winRate).toBe(100);
-    expect(result.totalProfitLoss).toBe(5);
+    expect(result.totalProfitLoss).toBeCloseTo(4.91676177, 8);
 
     expect(result.trades[0]).toEqual({
       entryPrice: 100,
       exitPrice: 105,
       quantity: 1,
-      profitLoss: 5
+      profitLoss: 4.91676177
     });
   });
 
@@ -519,7 +519,7 @@ describe('BacktestingService', () => {
       entryPrice: 105,
       exitPrice: 105,
       quantity: 1,
-      profitLoss: 0
+      "profitLoss": -0.08534525999999999
     });
   });
 
@@ -575,19 +575,18 @@ describe('BacktestingService', () => {
       strategy,
       candles,
       1,
-      100000,
-      0.1
+      100000
     );
 
     expect(result.totalTrades).toBe(1);
-    expect(result.totalFees).toBeCloseTo(0.21);
-    expect(result.totalProfitLoss).toBeCloseTo(9.79);
+    expect(result.totalFees).toBeCloseTo(0.08519526, 8);
+    expect(result.totalProfitLoss).toBeCloseTo(9.91480474, 8);
 
     expect(result.trades[0]).toEqual({
       entryPrice: 100,
       exitPrice: 110,
       quantity: 1,
-      profitLoss: 9.79
+      profitLoss: 9.91480474
     });
   });
 
@@ -644,18 +643,17 @@ describe('BacktestingService', () => {
       candles,
       1,
       100000,
-      0,
       0.1
     );
 
     expect(result.totalTrades).toBe(1);
-    expect(result.totalFees).toBe(0);
-    expect(result.totalProfitLoss).toBeCloseTo(9.79);
+    expect(result.totalFees).toBe(0.08519434594);
+    expect(result.totalProfitLoss).toBeCloseTo(9.704805654060007, 8);
 
     expect(result.trades[0].entryPrice).toBeCloseTo(100.1);
     expect(result.trades[0].exitPrice).toBeCloseTo(109.89);
     expect(result.trades[0].quantity).toBe(1);
-    expect(result.trades[0].profitLoss).toBeCloseTo(9.79);
+    expect(result.trades[0].profitLoss).toBeCloseTo(9.704805654060007, 8);
   });
 
   it('should calculate gross profit separately from net profit', () => {
@@ -709,15 +707,13 @@ describe('BacktestingService', () => {
       strategy,
       candles,
       1,
-      100000,
-      0.1,
-      0
+      100000
     );
 
     expect(result.totalTrades).toBe(1);
     expect(result.grossProfit).toBeCloseTo(10);
-    expect(result.totalFees).toBeCloseTo(0.21);
-    expect(result.totalProfitLoss).toBeCloseTo(9.79);
+    expect(result.totalFees).toBeCloseTo(0.08519526, 8);
+    expect(result.totalProfitLoss).toBeCloseTo(9.91480474, 8);
   });
 
   it('should calculate profit factor', () => {
@@ -829,13 +825,12 @@ describe('BacktestingService', () => {
       1,
       100000,
       0,
-      0,
       3,
       4
     );
 
     expect(result.totalTrades).toBe(1);
-    expect(result.totalProfitLoss).toBe(4);
+    expect(result.totalProfitLoss).toBe(3.916340364);
   });
 
   it('should calculate maximum drawdown', () => {
@@ -949,11 +944,412 @@ describe('BacktestingService', () => {
 
     expect(result.equityCurve).toEqual([
       100000,
-      100003,
-      99996
+      100002.91673177,
+      99995.83331354,
     ]);
 
-    expect(result.maxDrawdown).toBe(7);
+    expect(result.maxDrawdown).toBe(7.08341823000228);
     expect(result.maxDrawdownPercent).toBeCloseTo(0.007);
+  });
+
+  it('should calculate position quantity based on risk', () => {
+    const strategy: Strategy = {
+      id: '1',
+      name: 'Risk Based Position Sizing Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+
+      entryConditions: [
+        {
+          indicator: 'Price',
+          operator: '>',
+          value: 499
+        }
+      ],
+
+      exitConditions: [
+        {
+          indicator: 'Price',
+          operator: '>',
+          value: 505
+        }
+      ],
+
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 5,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 495,
+        high: 505,
+        low: 490,
+        close: 500
+      },
+      {
+        timestamp: 2,
+        open: 500,
+        high: 510,
+        low: 498,
+        close: 510
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      1,
+      100000,
+      0,
+      undefined,
+      undefined,
+      1
+    );
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].quantity).toBe(100);
+  });
+
+  it('should not create a trade when risk based quantity is zero', () => {
+    const strategy: Strategy = {
+      id: '1',
+      name: 'Zero Quantity Risk Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+
+      entryConditions: [
+        {
+          indicator: 'Price',
+          operator: '>',
+          value: 499
+        }
+      ],
+
+      exitConditions: [
+        {
+          indicator: 'Price',
+          operator: '>',
+          value: 505
+        }
+      ],
+
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 0,
+        takeProfitPercent: 5,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 495,
+        high: 505,
+        low: 490,
+        close: 500
+      },
+      {
+        timestamp: 2,
+        open: 500,
+        high: 510,
+        low: 498,
+        close: 510
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      1,
+      100000,
+      0,
+      undefined,
+      undefined,
+      1
+    );
+
+    expect(result.totalTrades).toBe(0);
+    expect(result.trades).toHaveLength(0);
+  });
+
+  it('should reduce position quantity when stop loss is farther away', () => {
+    const strategy: Strategy = {
+      id: '1',
+      name: 'Far Stop Loss Risk Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+
+      entryConditions: [
+        {
+          indicator: 'Price',
+          operator: '>',
+          value: 499
+        }
+      ],
+
+      exitConditions: [
+        {
+          indicator: 'Price',
+          operator: '>',
+          value: 505
+        }
+      ],
+
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 10,
+        takeProfitPercent: 5,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 495,
+        high: 505,
+        low: 490,
+        close: 500
+      },
+      {
+        timestamp: 2,
+        open: 500,
+        high: 510,
+        low: 498,
+        close: 510
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      1,
+      100000,
+      0,
+      undefined,
+      undefined,
+      1
+    );
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades).toHaveLength(1);
+
+    expect(result.trades[0].quantity).toBe(20);
+  });
+
+  it('should calculate position size from current capital after a loss', () => {
+    const strategy: Strategy = {
+      id: '1',
+      name: 'Capital Based Risk Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+
+      entryConditions: [
+        {
+          indicator: 'Price',
+          operator: '>',
+          value: 499
+        }
+      ],
+
+      exitConditions: [
+        {
+          indicator: 'Price',
+          operator: '>',
+          value: 505
+        }
+      ],
+
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 5,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 495,
+        high: 505,
+        low: 490,
+        close: 500
+      },
+      {
+        timestamp: 2,
+        open: 500,
+        high: 500,
+        low: 490,
+        close: 490
+      },
+      {
+        timestamp: 3,
+        open: 490,
+        high: 500,
+        low: 485,
+        close: 500
+      },
+      {
+        timestamp: 4,
+        open: 500,
+        high: 510,
+        low: 498,
+        close: 510
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      1,
+      100000,
+      0,
+      undefined,
+      undefined,
+      1
+    );
+
+    expect(result.totalTrades).toBe(2);
+    expect(result.trades).toHaveLength(2);
+
+    expect(result.trades[0].quantity).toBe(100);
+    expect(result.trades[1].quantity).toBeLessThan(100);
+  });
+
+  it('should limit position quantity when risk sizing exceeds available capital', () => {
+    const strategy: Strategy = {
+      id: '1',
+      name: 'Capital Limit Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 499 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 505 }
+      ],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 0.2,
+        takeProfitPercent: 5,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 499,
+        high: 500,
+        low: 498,
+        close: 500
+      },
+      {
+        timestamp: 2,
+        open: 500,
+        high: 510,
+        low: 499,
+        close: 510
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      1,
+      100000,
+      0,
+      undefined,
+      undefined,
+      1
+    );
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades[0].quantity).toBe(200);
+  });
+
+  it('should stop opening new trades after reaching maximum daily loss', () => {
+    const strategy: Strategy = {
+      id: '1',
+      name: 'Daily Loss Limit Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 499 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 505 }
+      ],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 5,
+        maxDailyLossPercent: 1,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 495,
+        high: 500,
+        low: 490,
+        close: 500
+      },
+      {
+        timestamp: 2,
+        open: 500,
+        high: 500,
+        low: 480,
+        close: 480
+      },
+      {
+        timestamp: 3,
+        open: 480,
+        high: 500,
+        low: 475,
+        close: 500
+      },
+      {
+        timestamp: 4,
+        open: 500,
+        high: 510,
+        low: 498,
+        close: 510
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      1,
+      100000,
+      0,
+      undefined,
+      undefined,
+      1
+    );
+
+    expect(result.totalTrades).toBe(1);
   });
 });

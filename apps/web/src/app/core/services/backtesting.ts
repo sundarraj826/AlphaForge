@@ -7,22 +7,25 @@ import { BacktestTrade } from '../models/backtest-trade.model';
 
 import { StrategyService } from './strategy';
 import { TradingCostService } from './trading-cost';
+import { TradingCostConfig } from '../models/trading-cost.model';
+import { PositionSizingService } from './position-sizing';
 
 @Service()
 export class BacktestingService {
 
     readonly strategyService = inject(StrategyService);
     readonly tradingCostService = inject(TradingCostService);
+    readonly positionSizingService = inject(PositionSizingService);
 
     runBacktest(
         strategy: Strategy,
         candles: MarketCandle[],
         quantity: number = 1,
         initialCapital: number = 100000,
-        feePercent: number = 0,
         slippagePercent: number = 0,
         startTimestamp?: number,
-        endTimestamp?: number
+        endTimestamp?: number,
+        riskPercent: number = 0
     ): BacktestResult {
 
         const filteredCandles = candles.filter(candle => {
@@ -42,6 +45,19 @@ export class BacktestingService {
 
             return true;
         });
+
+        const tradingCostConfig: TradingCostConfig = {
+            market: 'INDIAN_EQUITY_INTRADAY',
+            exchange: 'NSE',
+            broker: 'ZERODHA',
+            brokeragePercent: 0.03,
+            brokerageFixed: 20,
+            sttPercent: 0.025,
+            exchangeTransactionPercent: 0.00307,
+            sebiChargesPercent: 0.0001,
+            stampDutyPercent: 0.003,
+            gstPercent: 18
+        };
 
 
         let positionSide: 'LONG' | 'NONE' = 'NONE';
@@ -77,13 +93,55 @@ export class BacktestingService {
                 positionSide
             );
 
-            if (positionSide === 'NONE' && signal === 'BUY') {
-                positionSide = 'LONG';
+            const maxDailyLossPercent =
+                strategy.riskManagement?.maxDailyLossPercent ?? 0;
 
+            const maxDailyLoss =
+                initialCapital * (maxDailyLossPercent / 100);
+
+            const dailyLoss =
+                totalProfitLoss < 0
+                    ? Math.abs(totalProfitLoss)
+                    : 0;
+
+            if (
+                positionSide === 'NONE' &&
+                maxDailyLoss > 0 &&
+                dailyLoss >= maxDailyLoss
+            ) {
+                continue;
+            }
+
+
+            if (positionSide === 'NONE' && signal === 'BUY') {
                 const slippage =
                     candle.close * (slippagePercent / 100);
 
                 entryPrice = candle.close + slippage;
+
+                if (riskPercent > 0) {
+                    const stopLossPercent =
+                        strategy.riskManagement?.stopLossPercent ?? 0;
+
+                    const stopLossPrice =
+                        stopLossPercent > 0
+                            ? entryPrice * (1 - stopLossPercent / 100)
+                            : entryPrice;
+
+                    quantity = this.positionSizingService.calculateQuantity(
+                        finalCapital,
+                        riskPercent,
+                        entryPrice,
+                        stopLossPrice
+                    );
+                }
+
+                if (quantity <= 0) {
+                    entryPrice = 0;
+                    continue;
+                }
+
+                positionSide = 'LONG';
 
                 continue;
             }
@@ -119,7 +177,12 @@ export class BacktestingService {
                         (entryPrice + exitPrice) * quantity;
 
                     const fee =
-                        tradeValue * (feePercent / 100);
+                        this.tradingCostService.calculate(
+                            tradingCostConfig,
+                            entryPrice,
+                            exitPrice,
+                            quantity
+                        );
 
                     const profitLoss =
                         grossProfitLoss - fee;
@@ -128,7 +191,8 @@ export class BacktestingService {
 
                     totalTrades++;
                     totalProfitLoss += profitLoss;
-                    equityCurve.push(initialCapital + totalProfitLoss);
+                    finalCapital = initialCapital + totalProfitLoss;
+                    equityCurve.push(finalCapital);
 
                     if (profitLoss > 0) {
                         winningTrades++;
@@ -180,7 +244,12 @@ export class BacktestingService {
                         (entryPrice + exitPrice) * quantity;
 
                     const fee =
-                        tradeValue * (feePercent / 100);
+                        this.tradingCostService.calculate(
+                            tradingCostConfig,
+                            entryPrice,
+                            exitPrice,
+                            quantity
+                        );
 
                     const profitLoss =
                         grossProfitLoss - fee;
@@ -189,7 +258,10 @@ export class BacktestingService {
 
                     totalTrades++;
                     totalProfitLoss += profitLoss;
-                    equityCurve.push(initialCapital + totalProfitLoss);
+
+                    finalCapital = initialCapital + totalProfitLoss;
+
+                    equityCurve.push(finalCapital);
 
                     if (profitLoss > 0) {
                         winningTrades++;
@@ -230,7 +302,12 @@ export class BacktestingService {
                         (entryPrice + exitPrice) * quantity;
 
                     const fee =
-                        tradeValue * (feePercent / 100);
+                        this.tradingCostService.calculate(
+                            tradingCostConfig,
+                            entryPrice,
+                            exitPrice,
+                            quantity
+                        );
 
                     const profitLoss =
                         grossProfitLoss - fee;
@@ -239,7 +316,10 @@ export class BacktestingService {
 
                     totalTrades++;
                     totalProfitLoss += profitLoss;
-                    equityCurve.push(initialCapital + totalProfitLoss);
+
+                    finalCapital = initialCapital + totalProfitLoss;
+
+                    equityCurve.push(finalCapital);
 
                     if (profitLoss > 0) {
                         winningTrades++;
