@@ -1,15 +1,37 @@
-import { Service } from '@angular/core';
+
+import { Service, inject } from '@angular/core';
+
 import { PaperOrder } from '../models/paper-order.model';
 import { PaperPosition } from '../models/paper-position.model';
 import { PaperTrade } from '../models/paper-trade.model';
+import { TradingCostConfig } from '../models/trading-cost.model';
+
+import { TradingCostService } from './trading-cost';
 
 @Service()
 export class PaperTradingService {
 
+    private readonly _tradingCostService = new TradingCostService();
+
     private readonly _orders: PaperOrder[] = [];
     private readonly _positions: PaperPosition[] = [];
     private readonly _trades: PaperTrade[] = [];
+
     private _capital = 100000;
+
+    private readonly _tradingCostConfig: TradingCostConfig = {
+        market: 'INDIAN_EQUITY_INTRADAY',
+        exchange: 'NSE',
+        broker: 'ZERODHA',
+
+        brokeragePercent: 0.03,
+        brokerageFixed: 20,
+        sttPercent: 0.025,
+        exchangeTransactionPercent: 0.00307,
+        sebiChargesPercent: 0.0001,
+        stampDutyPercent: 0.003,
+        gstPercent: 18
+    };
 
     get capital(): number {
         return this._capital;
@@ -107,7 +129,7 @@ export class PaperTradingService {
                 currentPosition.side === 'LONG'
         );
 
-        if (!position) {
+        if (!position || !Number.isFinite(currentPrice) || currentPrice <= 0) {
             return;
         }
 
@@ -123,7 +145,7 @@ export class PaperTradingService {
         exitPrice: number
     ): number | null {
 
-        if (exitPrice <= 0) {
+        if (!Number.isFinite(exitPrice) || exitPrice <= 0) {
             return null;
         }
 
@@ -139,9 +161,18 @@ export class PaperTradingService {
 
         const position = this._positions[positionIndex];
 
-        const realizedProfitLoss =
+        const grossProfitLoss =
             (exitPrice - position.entryPrice) *
             position.quantity;
+
+        const tradingCosts = this._tradingCostService.calculate(
+            this._tradingCostConfig,
+            position.entryPrice,
+            exitPrice,
+            position.quantity
+        );
+
+        const netProfitLoss = grossProfitLoss - tradingCosts;
 
         const closedAt = Date.now();
 
@@ -150,17 +181,32 @@ export class PaperTradingService {
             quantity: position.quantity,
             entryPrice: position.entryPrice,
             exitPrice,
-            profitLoss: realizedProfitLoss,
+            profitLoss: netProfitLoss,
             openedAt: position.openedAt,
             closedAt
         };
 
         this._trades.push(trade);
 
-        this._capital += realizedProfitLoss;
+        this._capital += netProfitLoss;
 
         this._positions.splice(positionIndex, 1);
 
-        return realizedProfitLoss;
+        return netProfitLoss;
+    }
+
+    reset(initialCapital: number = 100000): void {
+
+        if (!Number.isFinite(initialCapital) || initialCapital <= 0) {
+            throw new Error(
+                'Initial capital must be a positive finite number.'
+            );
+        }
+
+        this._orders.length = 0;
+        this._positions.length = 0;
+        this._trades.length = 0;
+
+        this._capital = initialCapital;
     }
 }

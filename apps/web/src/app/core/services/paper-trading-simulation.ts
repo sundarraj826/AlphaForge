@@ -1,3 +1,4 @@
+
 import { inject, Service } from '@angular/core';
 
 import { MarketCandle } from '../models/market-candle.model';
@@ -16,15 +17,17 @@ export class PaperTradingSimulationService {
 
     run(
         strategy: Strategy,
-        candles: MarketCandle[]
+        candles: MarketCandle[],
+        initialCapital: number = 100000
     ): PaperTradingSimulationResult {
 
-        const initialCapital = this._paperTradingService.capital;
+        this._paperTradingService.reset(initialCapital);
+
+        const startingCapital = this._paperTradingService.capital;
 
         let positionSide: PositionSide = 'NONE';
 
         for (let index = 0; index < candles.length; index++) {
-
             const candleHistory = candles.slice(0, index + 1);
 
             const signal = this._runner.run(
@@ -35,34 +38,33 @@ export class PaperTradingSimulationService {
 
             if (signal === 'BUY' && positionSide === 'NONE') {
                 positionSide = 'LONG';
-            }
-
-            if (signal === 'SELL' && positionSide === 'LONG') {
+            } else if (signal === 'SELL' && positionSide === 'LONG') {
                 positionSide = 'NONE';
             }
         }
 
+        const trades = this._paperTradingService.trades;
+
+        const winningTrades = trades.filter(
+            trade => trade.profitLoss > 0
+        ).length;
+
+        const losingTrades = trades.filter(
+            trade => trade.profitLoss < 0
+        ).length;
+
+        const finalCapital = this._paperTradingService.capital;
+
         return {
-            initialCapital,
-            finalCapital: this._paperTradingService.capital,
-            totalProfitLoss:
-                this._paperTradingService.capital - initialCapital,
-            totalTrades: this._paperTradingService.trades.length,
-            winningTrades: this._paperTradingService.trades.filter(
-                trade => trade.profitLoss > 0
-            ).length,
-            losingTrades: this._paperTradingService.trades.filter(
-                trade => trade.profitLoss < 0
-            ).length,
-            winRate:
-                this._paperTradingService.trades.length > 0
-                    ? (
-                        this._paperTradingService.trades.filter(
-                            trade => trade.profitLoss > 0
-                        ).length /
-                        this._paperTradingService.trades.length
-                    ) * 100
-                    : 0
+            initialCapital: startingCapital,
+            finalCapital,
+            totalProfitLoss: finalCapital - startingCapital,
+            totalTrades: trades.length,
+            winningTrades,
+            losingTrades,
+            winRate: trades.length > 0
+                ? (winningTrades / trades.length) * 100
+                : 0
         };
     }
 }

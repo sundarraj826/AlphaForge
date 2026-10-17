@@ -1,0 +1,17 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+  "test": "node --test src/config/upstox.config.spec.mjs src/services/upstox-order.service.spec.mjs src/services/upstox-order-submit.service.spec.mjs"
+},
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.34.4",
+  "dependencies": {
+    "dotenv": "^18.0.7",
+    "upstox-js-sdk": "^2.31.0"
+  }
+}

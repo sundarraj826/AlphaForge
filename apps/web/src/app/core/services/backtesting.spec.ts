@@ -1352,4 +1352,706 @@ describe('BacktestingService', () => {
 
     expect(result.totalTrades).toBe(1);
   });
+
+
+  it('should reset the daily loss limit on a new trading day', () => {
+    const strategy: Strategy = {
+      id: 'daily-reset',
+      name: 'Daily Loss Reset Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 499 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 505 }
+      ],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 5,
+        maxDailyLossPercent: 1,
+        maxOpenTrades: 1
+      }
+    };
+
+    const day1 = new Date('2026-10-08T10:00:00+05:30').getTime();
+    const day2 = new Date('2026-10-09T10:00:00+05:30').getTime();
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: day1,
+        open: 499,
+        high: 500,
+        low: 490,
+        close: 500
+      },
+      {
+        timestamp: day1 + 15 * 60 * 1000,
+        open: 500,
+        high: 500,
+        low: 480,
+        close: 480
+      },
+      {
+        timestamp: day1 + 30 * 60 * 1000,
+        open: 480,
+        high: 500,
+        low: 475,
+        close: 500
+      },
+      {
+        timestamp: day2,
+        open: 500,
+        high: 500,
+        low: 498,
+        close: 500
+      },
+      {
+        timestamp: day2 + 15 * 60 * 1000,
+        open: 500,
+        high: 510,
+        low: 499,
+        close: 510
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      1,
+      100000,
+      0,
+      undefined,
+      undefined,
+      1
+    );
+
+    expect(result.totalTrades).toBe(2);
+    expect(result.trades).toHaveLength(2);
+    expect(result.trades[0].profitLoss).toBeLessThan(0);
+    expect(result.trades[1].profitLoss).toBeGreaterThan(0);
+  });
+
+
+  it('should force close an open position at end of day', () => {
+    const strategy: Strategy = {
+      id: 'eod-test',
+      name: 'EOD Exit Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 110 }
+      ],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 0,
+        takeProfitPercent: 0,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const entryTimestamp = new Date(
+      '2026-10-12T15:00:00+05:30'
+    ).getTime();
+
+    const eodTimestamp = new Date(
+      '2026-10-12T15:15:00+05:30'
+    ).getTime();
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: entryTimestamp,
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: eodTimestamp,
+        open: 100,
+        high: 104,
+        low: 100,
+        close: 103
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      1,
+      100000
+    );
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].entryPrice).toBe(100);
+    expect(result.trades[0].exitPrice).toBe(103);
+    expect(result.totalFees).toBeGreaterThan(0);
+    expect(result.totalProfitLoss).toBeGreaterThan(0);
+
+
+    expect(result.totalProfitLoss).toBeCloseTo(
+      result.grossProfit - result.grossLoss - result.totalFees,
+      8
+    );
+
+    expect(result.finalCapital).toBeCloseTo(
+      result.initialCapital + result.totalProfitLoss,
+      8
+    );
+
+    expect(result.equityCurve[result.equityCurve.length - 1])
+      .toBeCloseTo(result.finalCapital, 8);
+
+  });
+
+
+  it('should not count an open position as completed when data ends before EOD', () => {
+    const strategy: Strategy = {
+      id: 'incomplete-session',
+      name: 'Incomplete Session Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 110 }
+      ],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 0,
+        takeProfitPercent: 0,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: new Date(
+          '2026-10-12T14:30:00+05:30'
+        ).getTime(),
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: new Date(
+          '2026-10-12T14:45:00+05:30'
+        ).getTime(),
+        open: 100,
+        high: 103,
+        low: 99,
+        close: 102
+      }
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(0);
+    expect(result.trades).toHaveLength(0);
+  });
+
+
+  it('should record only one trade when SELL signal occurs at EOD', () => {
+    const strategy: Strategy = {
+      id: 'eod-sell-test',
+      name: 'EOD SELL Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 102 }
+      ],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 0,
+        takeProfitPercent: 0,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const entryTimestamp = new Date(
+      '2026-10-12T15:00:00+05:30'
+    ).getTime();
+
+    const eodTimestamp = new Date(
+      '2026-10-12T15:15:00+05:30'
+    ).getTime();
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: entryTimestamp,
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: eodTimestamp,
+        open: 100,
+        high: 104,
+        low: 100,
+        close: 103
+      }
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].exitPrice).toBe(103);
+    expect(result.totalFees).toBeGreaterThan(0);
+  });
+
+
+  it('should record only one trade when stop loss triggers at EOD', () => {
+    const strategy: Strategy = {
+      id: 'eod-stop-loss',
+      name: 'EOD Stop Loss Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 0,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: new Date(
+          '2026-10-12T15:00:00+05:30'
+        ).getTime(),
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: new Date(
+          '2026-10-12T15:15:00+05:30'
+        ).getTime(),
+        open: 100,
+        high: 101,
+        low: 97,
+        close: 99
+      }
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].entryPrice).toBe(100);
+    expect(result.trades[0].exitPrice).toBe(98);
+    expect(result.trades[0].profitLoss).toBeLessThan(0);
+  });
+
+
+  it('should record only one trade when take profit triggers at EOD', () => {
+    const strategy: Strategy = {
+      id: 'eod-take-profit',
+      name: 'EOD Take Profit Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 0,
+        takeProfitPercent: 3,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: new Date(
+          '2026-10-12T15:00:00+05:30'
+        ).getTime(),
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: new Date(
+          '2026-10-12T15:15:00+05:30'
+        ).getTime(),
+        open: 100,
+        high: 104,
+        low: 100,
+        close: 103
+      }
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].entryPrice).toBe(100);
+    expect(result.trades[0].exitPrice).toBe(103);
+    expect(result.trades[0].profitLoss).toBeGreaterThan(0);
+  });
+
+
+  it('should prioritize stop loss when both SL and TP are hit in the same candle', () => {
+    const strategy: Strategy = {
+      id: 'same-candle-sl-tp',
+      name: 'Same Candle SL TP Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 3,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: new Date(
+          '2026-10-12T14:45:00+05:30'
+        ).getTime(),
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: new Date(
+          '2026-10-12T15:00:00+05:30'
+        ).getTime(),
+        open: 100,
+        high: 104,
+        low: 97,
+        close: 101
+      }
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].entryPrice).toBe(100);
+    expect(result.trades[0].exitPrice).toBe(98);
+    expect(result.trades[0].profitLoss).toBeLessThan(0);
+  });
+
+
+  it('should maintain consistent P&L accounting across completed trades', () => {
+    const strategy: Strategy = {
+      id: 'accounting-consistency',
+      name: 'Accounting Consistency Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 102 }
+      ],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 3,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: 2,
+        open: 100,
+        high: 104,
+        low: 99,
+        close: 103
+      }
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(1);
+
+    expect(result.totalProfitLoss).toBeCloseTo(
+      result.grossProfit - result.grossLoss - result.totalFees,
+      8
+    );
+
+    expect(result.finalCapital).toBeCloseTo(
+      result.initialCapital + result.totalProfitLoss,
+      8
+    );
+
+    expect(result.equityCurve[result.equityCurve.length - 1])
+      .toBeCloseTo(result.finalCapital, 8);
+  });
+
+
+  it('should allow an open position to exit when the daily loss limit is reached', () => {
+    const strategy: Strategy = {
+      id: 'daily-loss-open-position',
+      name: 'Daily Loss Open Position Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 110 }
+      ],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 0,
+        maxDailyLossPercent: 1,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: 2,
+        open: 100,
+        high: 101,
+        low: 97,
+        close: 98
+      }
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].exitPrice).toBe(98);
+    expect(result.trades[0].profitLoss).toBeLessThan(0);
+  });
+
+
+  it('should reset the daily-loss limit on the next trading day', () => {
+    const strategy: Strategy = {
+      id: 'daily-loss-reset',
+      name: 'Daily Loss Reset Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 110 }
+      ],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 0,
+        maxDailyLossPercent: 1,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      // Day 1: enter a position
+      {
+        timestamp: new Date('2026-10-12T10:00:00+05:30').getTime(),
+        open: 100,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      // Day 1: stop-loss hit; loss exceeds the daily limit
+      {
+        timestamp: new Date('2026-10-12T10:15:00+05:30').getTime(),
+        open: 100,
+        high: 100,
+        low: 97,
+        close: 98
+      },
+      // Day 1: another entry should be blocked
+      {
+        timestamp: new Date('2026-10-12T10:30:00+05:30').getTime(),
+        open: 100,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      // Day 2: daily-loss tracking should reset
+      {
+        timestamp: new Date('2026-10-13T10:00:00+05:30').getTime(),
+        open: 100,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      // Day 2: close the new position at its stop-loss
+      {
+        timestamp: new Date('2026-10-13T10:15:00+05:30').getTime(),
+        open: 100,
+        high: 100,
+        low: 97,
+        close: 98
+      }
+    ];
+
+    const result = service.runBacktest(
+      strategy,
+      candles,
+      100,
+      10000
+    );
+
+    expect(result.totalTrades).toBe(2);
+    expect(result.trades).toHaveLength(2);
+    expect(result.trades[0].profitLoss).toBeLessThan(0);
+    expect(result.trades[1].profitLoss).toBeLessThan(0);
+  });
+
+
+  it('should not enter at the same candle close that generated a BUY signal', () => {
+    const strategy: Strategy = {
+      id: 'next-candle-entry',
+      name: 'Next Candle Entry Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 },
+      ],
+      exitConditions: [],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 0,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1,
+      },
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: new Date('2026-10-12T10:00:00+05:30').getTime(),
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100,
+      },
+      {
+        timestamp: new Date('2026-10-12T10:15:00+05:30').getTime(),
+        open: 105,
+        high: 106,
+        low: 104,
+        close: 105,
+      },
+      {
+        timestamp: new Date('2026-10-12T10:30:00+05:30').getTime(),
+        open: 106,
+        high: 107,
+        low: 105,
+        close: 106,
+      },
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(
+      result.trades.some(trade => trade.entryPrice === 100)
+    ).toBe(false);
+  });
+
+
+  it('should enter at the next candle open after a BUY signal', () => {
+    const strategy: Strategy = {
+      id: 'next-candle-entry',
+      name: 'Next Candle Entry Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 100 },
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 115 },
+      ],
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: new Date('2026-10-12T10:00:00+05:30').getTime(),
+        open: 99,
+        high: 102,
+        low: 98,
+        close: 101,
+      },
+      {
+        timestamp: new Date('2026-10-12T10:15:00+05:30').getTime(),
+        open: 110,
+        high: 112,
+        low: 109,
+        close: 110,
+      },
+      {
+        timestamp: new Date('2026-10-12T10:30:00+05:30').getTime(),
+        open: 116,
+        high: 121,
+        low: 115,
+        close: 120,
+      },
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades[0].entryPrice).toBe(110);
+  });
+
 });

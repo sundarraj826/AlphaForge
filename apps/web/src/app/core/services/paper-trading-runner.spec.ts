@@ -1,5 +1,4 @@
 import { TestBed } from '@angular/core/testing';
-
 import { PaperTradingRunnerService } from './paper-trading-runner';
 import { PaperTradingService } from './paper-trading';
 import { StrategyService } from './strategy';
@@ -7,13 +6,10 @@ import { IndicatorService } from './indicators';
 import { Strategy } from '../models/strategy.model';
 import { MarketCandle } from '../models/market-candle.model';
 import { PositionSizingService } from './position-sizing';
-
 describe('PaperTradingRunnerService', () => {
-
   let service: PaperTradingRunnerService;
   let paperTradingService: PaperTradingService;
   let strategyService: StrategyService;
-
   beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
@@ -24,18 +20,14 @@ describe('PaperTradingRunnerService', () => {
         PositionSizingService
       ]
     });
-
     service = TestBed.inject(PaperTradingRunnerService);
     paperTradingService = TestBed.inject(PaperTradingService);
     strategyService = TestBed.inject(StrategyService);
   });
-
   it('should be created', () => {
     expect(service).toBeTruthy();
   });
-
   it('should create a paper BUY order when strategy returns BUY', () => {
-
     const strategy: Strategy = {
       id: 'test-strategy',
       name: 'Test Strategy',
@@ -57,7 +49,6 @@ describe('PaperTradingRunnerService', () => {
         maxOpenTrades: 1
       }
     };
-
     const candles: MarketCandle[] = [
       {
         timestamp: Date.now(),
@@ -68,17 +59,13 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       }
     ];
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('BUY');
-
     const orders = paperTradingService.orders;
-
     expect(orders).toHaveLength(1);
     expect(orders[0].symbol).toBe(strategy.instrument);
     expect(orders[0].side).toBe('BUY');
@@ -86,9 +73,7 @@ describe('PaperTradingRunnerService', () => {
     expect(orders[0].requestedPrice).toBe(105);
     expect(orders[0].status).toBe('FILLED');
   });
-
   it('should open a virtual position after a paper BUY order is filled', () => {
-
     const strategy: Strategy = {
       id: 'test-strategy',
       name: 'Test Strategy',
@@ -110,7 +95,6 @@ describe('PaperTradingRunnerService', () => {
         maxOpenTrades: 1
       }
     };
-
     const candles: MarketCandle[] = [
       {
         timestamp: Date.now(),
@@ -121,15 +105,12 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       }
     ];
-
     service.run(
       strategy,
       candles,
       'NONE'
     );
-
     const positions = paperTradingService.positions;
-
     expect(positions).toHaveLength(1);
     expect(positions[0].symbol).toBe(strategy.instrument);
     expect(positions[0].side).toBe('LONG');
@@ -138,9 +119,7 @@ describe('PaperTradingRunnerService', () => {
     expect(positions[0].currentPrice).toBe(105);
     expect(positions[0].unrealizedProfitLoss).toBe(0);
   });
-
   it('should update unrealized P&L when the market price changes', () => {
-
     const strategy: Strategy = {
       id: 'test-strategy',
       name: 'Test Strategy',
@@ -162,7 +141,6 @@ describe('PaperTradingRunnerService', () => {
         maxOpenTrades: 1
       }
     };
-
     const candles: MarketCandle[] = [
       {
         timestamp: Date.now(),
@@ -173,27 +151,21 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       }
     ];
-
     service.run(
       strategy,
       candles,
       'NONE'
     );
-
     paperTradingService.updatePositionPrice(
       strategy.instrument,
       110
     );
-
     const positions = paperTradingService.positions;
-
     expect(positions).toHaveLength(1);
     expect(positions[0].currentPrice).toBe(110);
     expect(positions[0].unrealizedProfitLoss).toBe(2380);
   });
-
   it('should close the virtual position and calculate realized P&L', () => {
-
     const strategy: Strategy = {
       id: 'test-strategy',
       name: 'Test Strategy',
@@ -222,7 +194,6 @@ describe('PaperTradingRunnerService', () => {
         maxOpenTrades: 1
       }
     };
-
     const candles: MarketCandle[] = [
       {
         timestamp: Date.now(),
@@ -233,26 +204,21 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       }
     ];
-
     service.run(
       strategy,
       candles,
       'NONE'
     );
-
     const realizedProfitLoss =
       paperTradingService.closePosition(
         strategy.instrument,
         110
       );
-
-    expect(realizedProfitLoss).toBe(2380);
+    expect(realizedProfitLoss).toBeCloseTo(2325.44410996, 5);
     expect(paperTradingService.positions).toHaveLength(0);
-    expect(paperTradingService.capital).toBe(102380);
+    expect(paperTradingService.capital).toBeCloseTo(102325.44410996, 5);
   });
-
   it('should close the virtual position when strategy returns SELL', () => {
-
     const strategy: Strategy = {
       id: 'test-strategy',
       name: 'Test Strategy',
@@ -276,12 +242,11 @@ describe('PaperTradingRunnerService', () => {
       riskManagement: {
         riskPerTrade: 1,
         stopLossPercent: 2,
-        takeProfitPercent: 4,
+        takeProfitPercent: 10,
         maxDailyLossPercent: 5,
         maxOpenTrades: 1
       }
     };
-
     const buyCandles: MarketCandle[] = [
       {
         timestamp: Date.now(),
@@ -292,15 +257,12 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       }
     ];
-
     service.run(
       strategy,
       buyCandles,
       'NONE'
     );
-
     expect(paperTradingService.positions).toHaveLength(1);
-
     const sellCandles: MarketCandle[] = [
       {
         timestamp: Date.now() + 60000,
@@ -311,18 +273,15 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       }
     ];
-
     const signal = service.run(
       strategy,
       sellCandles,
       'LONG'
     );
-
     expect(signal).toBe('SELL');
     expect(paperTradingService.positions).toHaveLength(0);
-    expect(paperTradingService.capital).toBe(102380);
+    expect(paperTradingService.capital).toBeCloseTo(102325.44410996, 5);
   });
-
   it('should close the position when stop loss is reached', () => {
     const strategy: Strategy = {
       id: 'stop-loss-test',
@@ -352,7 +311,6 @@ describe('PaperTradingRunnerService', () => {
         maxOpenTrades: 1
       }
     };
-
     const entryCandle: MarketCandle = {
       timestamp: 1,
       open: 100,
@@ -361,7 +319,6 @@ describe('PaperTradingRunnerService', () => {
       close: 105,
       volume: 1000
     };
-
     const stopLossCandle: MarketCandle = {
       timestamp: 2,
       open: 105,
@@ -370,21 +327,17 @@ describe('PaperTradingRunnerService', () => {
       close: 102,
       volume: 1000
     };
-
     service.run(strategy, [entryCandle], 'NONE');
-
     const signal = service.run(
       strategy,
       [entryCandle, stopLossCandle],
       'LONG'
     );
-
     expect(signal).toBe('SELL');
     expect(paperTradingService.positions).toHaveLength(0);
     expect(paperTradingService.trades).toHaveLength(1);
-    expect(paperTradingService.trades[0].profitLoss).toBe(-1428);
+    expect(paperTradingService.trades[0].profitLoss).toBeCloseTo(-1051.8330943224, 5);
   });
-
   it('should close the position when take profit is reached', () => {
     const strategy: Strategy = {
       id: 'take-profit-test',
@@ -414,7 +367,6 @@ describe('PaperTradingRunnerService', () => {
         maxOpenTrades: 1
       }
     };
-
     const entryCandle: MarketCandle = {
       timestamp: 1,
       open: 100,
@@ -423,7 +375,6 @@ describe('PaperTradingRunnerService', () => {
       close: 105,
       volume: 1000
     };
-
     const takeProfitCandle: MarketCandle = {
       timestamp: 2,
       open: 105,
@@ -432,25 +383,21 @@ describe('PaperTradingRunnerService', () => {
       close: 110,
       volume: 1000
     };
-
     service.run(
       strategy,
       [entryCandle],
       'NONE'
     );
-
     const signal = service.run(
       strategy,
       [entryCandle, takeProfitCandle],
       'LONG'
     );
-
     expect(signal).toBe('SELL');
     expect(paperTradingService.positions).toHaveLength(0);
     expect(paperTradingService.trades).toHaveLength(1);
-    expect(paperTradingService.trades[0].profitLoss).toBe(2380);
+    expect(paperTradingService.trades[0].profitLoss).toBeCloseTo(1944.7931573648, 5);
   });
-
   it('should create an INTRADAY BUY order using ATR-based stop loss for position sizing', () => {
     const strategy: Strategy = {
       id: 'intraday-test',
@@ -474,12 +421,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 50; index++) {
       const close = 100 + index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 0.5,
@@ -489,7 +433,6 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     candles.push({
       timestamp: 51,
       open: 150 - 0.5,
@@ -498,17 +441,13 @@ describe('PaperTradingRunnerService', () => {
       close: 150,
       volume: 1500
     });
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('BUY');
-
     const orders = paperTradingService.orders;
-
     expect(orders).toHaveLength(1);
     expect(orders[0].symbol).toBe('NIFTY50');
     expect(orders[0].side).toBe('BUY');
@@ -516,7 +455,6 @@ describe('PaperTradingRunnerService', () => {
     expect(orders[0].requestedPrice).toBe(150);
     expect(orders[0].status).toBe('FILLED');
   });
-
   it('should reduce INTRADAY quantity when ATR stop loss is wider', () => {
     const strategy: Strategy = {
       id: 'intraday-risk-test',
@@ -540,12 +478,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 50; index++) {
       const close = 100 + index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 0.5,
@@ -555,7 +490,6 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     candles.push({
       timestamp: 51,
       open: 149.5,
@@ -564,43 +498,32 @@ describe('PaperTradingRunnerService', () => {
       close: 150,
       volume: 1500
     });
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('BUY');
-
     const order = paperTradingService.orders[0];
-
     expect(order.quantity).toBeGreaterThan(0);
-
     const setup =
       TestBed.inject(StrategyService).evaluateIntradaySetup(
         strategy,
         candles
       );
-
     expect(setup).not.toBeNull();
-
     if (!setup) {
       return;
     }
-
     const riskPerShare =
       setup.entryPrice - setup.stopLossPrice;
-
     const expectedRiskAmount =
       paperTradingService.capital *
       (strategy.riskManagement!.riskPerTrade / 100);
-
     const expectedQuantity =
       Math.floor(
         expectedRiskAmount / riskPerShare
       );
-
     expect(order.quantity).toBe(
       Math.min(
         expectedQuantity,
@@ -611,7 +534,6 @@ describe('PaperTradingRunnerService', () => {
       )
     );
   });
-
   it('should not create an INTRADAY BUY order when there are insufficient candles', () => {
     const strategy: Strategy = {
       id: 'intraday-insufficient-data-test',
@@ -635,12 +557,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 10; index++) {
       const close = 100 + index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 0.5,
@@ -650,20 +569,15 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('WAIT');
-
     expect(paperTradingService.orders).toHaveLength(0);
-
     expect(paperTradingService.positions).toHaveLength(0);
   });
-
   it('should not create an INTRADAY BUY order when the latest candle is bearish', () => {
     const strategy: Strategy = {
       id: 'intraday-bearish-test',
@@ -687,12 +601,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 50; index++) {
       const close = 100 + index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 0.5,
@@ -702,7 +613,6 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     candles.push({
       timestamp: 51,
       open: 151,
@@ -711,20 +621,15 @@ describe('PaperTradingRunnerService', () => {
       close: 150,
       volume: 1500
     });
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('WAIT');
-
     expect(paperTradingService.orders).toHaveLength(0);
-
     expect(paperTradingService.positions).toHaveLength(0);
   });
-
   it('should not create an INTRADAY BUY order when volume confirmation fails', () => {
     const strategy: Strategy = {
       id: 'intraday-volume-test',
@@ -748,12 +653,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 50; index++) {
       const close = 100 + index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 0.5,
@@ -763,7 +665,6 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     candles.push({
       timestamp: 51,
       open: 149.5,
@@ -772,20 +673,15 @@ describe('PaperTradingRunnerService', () => {
       close: 150,
       volume: 1000
     });
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('WAIT');
-
     expect(paperTradingService.orders).toHaveLength(0);
-
     expect(paperTradingService.positions).toHaveLength(0);
   });
-
   it('should not create an INTRADAY BUY order when EMA trend is bearish', () => {
     const strategy: Strategy = {
       id: 'intraday-ema-test',
@@ -809,12 +705,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 50; index++) {
       const close = 150 - index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 0.5,
@@ -824,7 +717,6 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     candles.push({
       timestamp: 51,
       open: 100 - 0.5,
@@ -833,20 +725,15 @@ describe('PaperTradingRunnerService', () => {
       close: 100,
       volume: 1500
     });
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('WAIT');
-
     expect(paperTradingService.orders).toHaveLength(0);
-
     expect(paperTradingService.positions).toHaveLength(0);
   });
-
   it('should not create an INTRADAY BUY order when position size is zero', () => {
     const strategy: Strategy = {
       id: 'intraday-zero-quantity-test',
@@ -870,12 +757,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 50; index++) {
       const close = 1000 + index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 1,
@@ -885,7 +769,6 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     candles.push({
       timestamp: 51,
       open: 1049,
@@ -894,20 +777,15 @@ describe('PaperTradingRunnerService', () => {
       close: 1050,
       volume: 1500
     });
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('WAIT');
-
     expect(paperTradingService.orders).toHaveLength(0);
-
     expect(paperTradingService.positions).toHaveLength(0);
   });
-
   it('should not create an INTRADAY BUY order when risk per trade is zero', () => {
     const strategy: Strategy = {
       id: 'intraday-zero-risk-test',
@@ -931,12 +809,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 50; index++) {
       const close = 100 + index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 0.5,
@@ -946,7 +821,6 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     candles.push({
       timestamp: 51,
       open: 149.5,
@@ -955,18 +829,15 @@ describe('PaperTradingRunnerService', () => {
       close: 150,
       volume: 1500
     });
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('WAIT');
     expect(paperTradingService.orders).toHaveLength(0);
     expect(paperTradingService.positions).toHaveLength(0);
   });
-
   it('should not create another INTRADAY BUY order when a LONG position already exists', () => {
     const strategy: Strategy = {
       id: 'intraday-duplicate-position-test',
@@ -990,12 +861,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 50; index++) {
       const close = 100 + index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 0.5,
@@ -1005,7 +873,6 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     candles.push({
       timestamp: 51,
       open: 149.5,
@@ -1014,37 +881,30 @@ describe('PaperTradingRunnerService', () => {
       close: 150,
       volume: 1500
     });
-
     // First BUY creates the position.
     const firstSignal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(firstSignal).toBe('BUY');
     expect(paperTradingService.orders).toHaveLength(1);
     expect(paperTradingService.positions).toHaveLength(1);
-
     // Same BUY setup arrives again while already LONG.
     const secondSignal = service.run(
       strategy,
       candles,
       'LONG'
     );
-
     expect(secondSignal).not.toBe('BUY');
-
     // No second BUY order should be created.
     expect(
       paperTradingService.orders.filter(
         order => order.side === 'BUY'
       )
     ).toHaveLength(1);
-
     expect(paperTradingService.positions).toHaveLength(1);
   });
-
   it('should not create an INTRADAY BUY order when capital cannot afford one share', () => {
     const strategy: Strategy = {
       id: 'intraday-insufficient-capital-test',
@@ -1068,12 +928,9 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [];
-
     for (let index = 0; index < 50; index++) {
       const close = 100 + index;
-
       candles.push({
         timestamp: index + 1,
         open: close - 0.5,
@@ -1083,7 +940,6 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       });
     }
-
     candles.push({
       timestamp: 51,
       open: 149.5,
@@ -1092,25 +948,21 @@ describe('PaperTradingRunnerService', () => {
       close: 150,
       volume: 1500
     });
-
     // Simulate an account that cannot afford one share.
     (
       paperTradingService as unknown as {
         _capital: number;
       }
     )._capital = 100;
-
     const signal = service.run(
       strategy,
       candles,
       'NONE'
     );
-
     expect(signal).toBe('WAIT');
     expect(paperTradingService.orders).toHaveLength(0);
     expect(paperTradingService.positions).toHaveLength(0);
   });
-
   it('should not create a SELL order when no actual position exists', () => {
     const strategy: Strategy = {
       id: 'sell-without-position-test',
@@ -1134,7 +986,6 @@ describe('PaperTradingRunnerService', () => {
         rewardRiskRatio: 2
       }
     };
-
     const candles: MarketCandle[] = [
       {
         timestamp: 1,
@@ -1145,20 +996,16 @@ describe('PaperTradingRunnerService', () => {
         volume: 1000
       }
     ];
-
     vi.spyOn(
       strategyService,
       'evaluateStrategy'
     ).mockReturnValue('SELL');
-
     const signal = service.run(
       strategy,
       candles,
       'LONG'
     );
-
     expect(signal).toBe('SELL');
-
     expect(paperTradingService.orders).toHaveLength(0);
     expect(paperTradingService.positions).toHaveLength(0);
     expect(paperTradingService.trades).toHaveLength(0);

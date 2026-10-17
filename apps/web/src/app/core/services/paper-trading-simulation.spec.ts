@@ -1,3 +1,4 @@
+
 import { TestBed } from '@angular/core/testing';
 
 import { PaperTradingSimulationService } from './paper-trading-simulation';
@@ -85,9 +86,7 @@ describe('PaperTradingSimulationService', () => {
     expect(paperTradingService.positions).toHaveLength(1);
     expect(paperTradingService.positions[0].quantity).toBe(476);
     expect(paperTradingService.positions[0].currentPrice).toBe(108);
-    expect(
-      paperTradingService.positions[0].unrealizedProfitLoss
-    ).toBe(1428);
+    expect(paperTradingService.positions[0].unrealizedProfitLoss).toBe(1428);
   });
 
   it('should close the paper position when the strategy returns SELL', () => {
@@ -107,14 +106,14 @@ describe('PaperTradingSimulationService', () => {
       exitConditions: [
         {
           indicator: 'Price',
-          operator: '<',
-          value: 100
+          operator: '>',
+          value: 109
         }
       ],
       riskManagement: {
         riskPerTrade: 1,
         stopLossPercent: 2,
-        takeProfitPercent: 4,
+        takeProfitPercent: 10,
         maxDailyLossPercent: 5,
         maxOpenTrades: 1
       }
@@ -133,27 +132,26 @@ describe('PaperTradingSimulationService', () => {
         timestamp: 2,
         open: 105,
         high: 110,
-        low: 100,
+        low: 105,
         close: 110,
         volume: 1000
-      },
+      }
     ];
 
     const result = service.run(strategy, candles);
 
     expect(paperTradingService.positions).toHaveLength(0);
-    expect(paperTradingService.capital).toBe(102380);
-
+    expect(paperTradingService.capital).toBeCloseTo(102325.44410996, 5);
     expect(result.initialCapital).toBe(100000);
-    expect(result.finalCapital).toBe(102380);
-    expect(result.totalProfitLoss).toBe(2380);
+    expect(result.finalCapital).toBeCloseTo(102325.44410996, 5);
+    expect(result.totalProfitLoss).toBeCloseTo(2325.44410996, 5);
     expect(result.totalTrades).toBe(1);
     expect(result.winningTrades).toBe(1);
     expect(result.losingTrades).toBe(0);
     expect(result.winRate).toBe(100);
   });
 
-  it('should track a losing paper trade correctly', () => {
+  it('should track a losing paper trade correctly when stop loss is reached', () => {
     const strategy: Strategy = {
       id: 'losing-trade-strategy',
       name: 'Losing Trade Strategy',
@@ -177,7 +175,7 @@ describe('PaperTradingSimulationService', () => {
       riskManagement: {
         riskPerTrade: 1,
         stopLossPercent: 2,
-        takeProfitPercent: 4,
+        takeProfitPercent: 0,
         maxDailyLossPercent: 5,
         maxOpenTrades: 1
       }
@@ -205,13 +203,11 @@ describe('PaperTradingSimulationService', () => {
     const result = service.run(strategy, candles);
 
     expect(paperTradingService.positions).toHaveLength(0);
-
     expect(result.totalTrades).toBe(1);
     expect(result.winningTrades).toBe(0);
     expect(result.losingTrades).toBe(1);
     expect(result.winRate).toBe(0);
-
-    expect(result.totalProfitLoss).toBe(-2380);
-    expect(result.finalCapital).toBe(97620);
+    expect(result.totalProfitLoss).toBeCloseTo(-1051.8330943224, 5);
+    expect(result.finalCapital).toBeCloseTo(98948.1669056776, 5);
   });
 });

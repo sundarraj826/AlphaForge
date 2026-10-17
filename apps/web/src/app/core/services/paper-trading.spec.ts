@@ -118,7 +118,7 @@ describe('PaperTradingService', () => {
       1275
     );
 
-    expect(realizedProfitLoss).toBe(4800);
+    expect(realizedProfitLoss).toBeCloseTo(4662.3964888, 5);
     expect(service.positions).toHaveLength(0);
     expect(service.trades).toHaveLength(1);
 
@@ -127,7 +127,7 @@ describe('PaperTradingService', () => {
       quantity: 200,
       entryPrice: 1251,
       exitPrice: 1275,
-      profitLoss: 4800
+      profitLoss: 4662.3964888
     });
   });
 
@@ -155,7 +155,7 @@ describe('PaperTradingService', () => {
       1275
     );
 
-    expect(service.capital).toBe(104800);
+    expect(service.capital).toBeCloseTo(104662.3964888, 5);
   });
 
   it('should not close a position when exit price is zero', () => {
