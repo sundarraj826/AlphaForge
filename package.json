@@ -9,6 +9,11 @@
     "lint": "echo \"Lint workspace\"",
     "test": "echo \"Test workspace\""
   },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3"
+    ]
+  },
   "devDependencies": {
     "@angular/cli": "^22.0.5"
   }

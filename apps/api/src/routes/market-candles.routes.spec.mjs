@@ -1,18 +1,41 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import { createApiServer } from '../server.mjs';
+import { createOrderIntentStore } from '../storage/order-intent.store.mjs';
 import { handleMarketCandles } from './market-candles.routes.mjs';
 
+function createTestServer(t) {
+    const temporaryDirectory = mkdtempSync(
+        path.join(tmpdir(), 'alphaforge-market-test-'),
+    );
+    const store = createOrderIntentStore({
+        databasePath: path.join(
+            temporaryDirectory,
+            'order-intents.sqlite',
+        ),
+    });
+    const server = createApiServer({ orderIntentStore: store });
+
+    t.after(() => new Promise(resolve => {
+        server.close(() => {
+            store.close();
+            rmSync(temporaryDirectory, { recursive: true, force: true });
+            resolve();
+        });
+    }));
+
+    return server;
+}
+
 test('GET /api/market/candles returns three mock candles', async (t) => {
-    const server = createApiServer();
+    const server = createTestServer(t);
 
     await new Promise((resolve) => {
         server.listen(0, '127.0.0.1', resolve);
-    });
-
-    t.after(() => {
-        server.close();
     });
 
     const address = server.address();
@@ -30,14 +53,10 @@ test('GET /api/market/candles returns three mock candles', async (t) => {
 });
 
 test('GET /api/market/candles returns valid OHLC values', async (t) => {
-    const server = createApiServer();
+    const server = createTestServer(t);
 
     await new Promise((resolve) => {
         server.listen(0, '127.0.0.1', resolve);
-    });
-
-    t.after(() => {
-        server.close();
     });
 
     const address = server.address();

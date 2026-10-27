@@ -1,7 +1,11 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { submitSandboxLimitOrder } from './upstox-order-submit.service.mjs';
+import {
+    ConfirmedSandboxOrderRejectionError,
+    submitSandboxLimitOrder,
+    UnknownSandboxOrderOutcomeError,
+} from './upstox-order-submit.service.mjs';
 import { validateSandboxLimitOrder } from '../config/order-risk.config.mjs';
 
 const riskConfig = {
@@ -143,6 +147,45 @@ test('returns the order ID from a mocked successful response', async () => {
     assert.equal(capturedRequest.transactionType, 'BUY');
 });
 
+test('rejects malformed or unusable order IDs as an unknown outcome', async () => {
+    for (const orderIds of [
+        [null],
+        [''],
+        [' \t\n '],
+        [{}],
+        ['valid-order-id', null],
+        ['valid-order-id', '   '],
+        ['valid-order-id', {}],
+    ]) {
+        await assert.rejects(
+            submit(validOrder, {
+                clientFactory: sandboxClient,
+                orderApiFactory: () => mockOrderApi([
+                    null,
+                    { status: 'success', data: { orderIds } },
+                ]),
+            }),
+            UnknownSandboxOrderOutcomeError,
+            `expected ${JSON.stringify(orderIds)} to be ambiguous`,
+        );
+    }
+});
+
+test('trims usable order IDs from a successful provider response', async () => {
+    const result = await submit(validOrder, {
+        clientFactory: sandboxClient,
+        orderApiFactory: () => mockOrderApi([
+            null,
+            {
+                status: 'success',
+                data: { orderIds: ['  sandbox-order-id  '] },
+            },
+        ]),
+    });
+
+    assert.deepEqual(result.orderIds, ['sandbox-order-id']);
+});
+
 test('reports a failed Sandbox submission without exposing details', async () => {
     await assert.rejects(
         submit(validOrder, {
@@ -150,7 +193,54 @@ test('reports a failed Sandbox submission without exposing details', async () =>
             orderApiFactory: () =>
                 mockOrderApi([new Error('Simulated API failure'), null]),
         }),
-        /Sandbox order submission failed/,
+        UnknownSandboxOrderOutcomeError,
+    );
+});
+
+test('distinguishes confirmed Sandbox rejection from ambiguous responses', async () => {
+    await assert.rejects(
+        submit(validOrder, {
+            clientFactory: sandboxClient,
+            orderApiFactory: () => mockOrderApi([
+                null,
+                {
+                    status: 'error',
+                    errors: [{ errorCode: 'MOCK_REJECTED' }],
+                },
+            ]),
+        }),
+        ConfirmedSandboxOrderRejectionError,
+    );
+
+    await assert.rejects(
+        submit(validOrder, {
+            clientFactory: sandboxClient,
+            orderApiFactory: () =>
+                mockOrderApi([new Error('connection lost'), null]),
+        }),
+        UnknownSandboxOrderOutcomeError,
+    );
+
+    await assert.rejects(
+        submit(validOrder, {
+            clientFactory: sandboxClient,
+            orderApiFactory: () =>
+                mockOrderApi([null, { status: 'unexpected' }]),
+        }),
+        UnknownSandboxOrderOutcomeError,
+    );
+});
+
+test('marks a provider callback timeout as an unknown outcome', async () => {
+    await assert.rejects(
+        submit(validOrder, {
+            clientFactory: sandboxClient,
+            orderApiFactory: () => ({
+                placeOrder: () => {},
+            }),
+            submissionTimeoutMs: 5,
+        }),
+        UnknownSandboxOrderOutcomeError,
     );
 });
 

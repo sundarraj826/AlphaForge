@@ -1,10 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import Database from 'better-sqlite3';
 
 import { createApiServer, listenApiServer } from './server.mjs';
 import { OrderRiskConfigurationError } from './config/order-risk.config.mjs';
+import {
+    ConfirmedSandboxOrderRejectionError,
+    submitSandboxLimitOrder,
+} from './services/upstox-order-submit.service.mjs';
+import { createOrderIntentStore } from './storage/order-intent.store.mjs';
 
 const VALID_API_TOKEN = 'a'.repeat(48);
+const VALID_IDEMPOTENCY_KEY = 'test-idempotency-key-0001';
 const VALID_ORDER = {
     instrumentToken: 'NSE_EQ|INE669E01016',
     quantity: 1,
@@ -21,29 +32,69 @@ const TEST_RISK_CONFIG = {
 };
 
 async function startServer(t, options) {
+    let temporaryDirectory;
+    let orderIntentStore = options.orderIntentStore;
+    if (!orderIntentStore && !options.orderIntentStoreFactory) {
+        temporaryDirectory = mkdtempSync(
+            path.join(tmpdir(), 'alphaforge-api-test-'),
+        );
+        orderIntentStore = createOrderIntentStore({
+            databasePath: path.join(
+                temporaryDirectory,
+                'order-intents.sqlite',
+            ),
+        });
+    }
+
     const server = createApiServer({
         loadOrderRiskConfig: () => TEST_RISK_CONFIG,
+        ...(orderIntentStore ? { orderIntentStore } : {}),
         ...options,
     });
     await new Promise((resolve, reject) => {
         server.once('error', reject);
         listenApiServer(server, 0).once('listening', resolve);
     });
-    t.after(() => new Promise(resolve => server.close(resolve)));
+    let shutdownPromise;
+    const shutdown = () => {
+        if (shutdownPromise) {
+            return shutdownPromise;
+        }
+
+        shutdownPromise = new Promise(resolve => {
+            server.close(() => resolve());
+        }).then(() => {
+            if (temporaryDirectory) {
+                orderIntentStore.close();
+                rmSync(temporaryDirectory, { recursive: true, force: true });
+            }
+        });
+        return shutdownPromise;
+    };
+    t.after(shutdown);
 
     const address = server.address();
     return {
         address,
         baseUrl: `http://127.0.0.1:${address.port}`,
+        shutdown,
     };
 }
 
-async function postOrder(baseUrl, authorization, order = VALID_ORDER) {
+async function postOrder(
+    baseUrl,
+    authorization,
+    order = VALID_ORDER,
+    idempotencyKey = VALID_IDEMPOTENCY_KEY,
+) {
     return fetch(`${baseUrl}/api/orders`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             ...(authorization ? { Authorization: authorization } : {}),
+            ...(idempotencyKey === null
+                ? {}
+                : { 'Idempotency-Key': idempotencyKey }),
         },
         body: JSON.stringify(order),
     });
@@ -219,7 +270,8 @@ test('CORS permits Authorization only for the configured local Angular origin', 
         headers: {
             Origin: 'http://localhost:4200',
             'Access-Control-Request-Method': 'POST',
-            'Access-Control-Request-Headers': 'authorization,content-type',
+            'Access-Control-Request-Headers':
+                'authorization,content-type,idempotency-key',
         },
     });
 
@@ -234,7 +286,7 @@ test('CORS permits Authorization only for the configured local Angular origin', 
             .split(',')
             .map(header => header.trim().toLowerCase())
             .sort(),
-        ['authorization', 'content-type'],
+        ['authorization', 'content-type', 'idempotency-key'],
     );
 
     const disallowedResponse = await fetch(`${baseUrl}/api/orders`, {
@@ -242,7 +294,8 @@ test('CORS permits Authorization only for the configured local Angular origin', 
         headers: {
             Origin: 'http://localhost:4201',
             'Access-Control-Request-Method': 'POST',
-            'Access-Control-Request-Headers': 'authorization,content-type',
+            'Access-Control-Request-Headers':
+                'authorization,content-type,idempotency-key',
         },
     });
 
@@ -394,6 +447,7 @@ test('uses an exact decimal notional boundary at the API boundary', async (t) =>
         baseUrl,
         `Bearer ${VALID_API_TOKEN}`,
         { ...boundaryOrder, price: 0.100001 },
+        'test-idempotency-key-above-limit',
     );
     assert.equal(aboveLimitResponse.status, 422);
 });
@@ -443,4 +497,553 @@ test('returns 400 for invalid quantity or limit price before submission', async 
     }
 
     assert.equal(submissionCalled, false);
+});
+
+test('requires a valid Idempotency-Key after authentication', async (t) => {
+    let submissionCalls = 0;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalls++;
+            return { status: 'success', orderIds: ['mock-key-order'] };
+        },
+    });
+
+    for (const idempotencyKey of [null, 'invalid key', 'short']) {
+        const response = await postOrder(
+            baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            idempotencyKey,
+        );
+        assert.equal(response.status, 400);
+    }
+
+    assert.equal(submissionCalls, 0);
+});
+
+test('replays a successful result for a duplicate key without resubmitting', async (t) => {
+    let submissionCalls = 0;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalls++;
+            return {
+                status: 'success',
+                orderIds: ['mock-idempotent-order'],
+            };
+        },
+    });
+
+    const first = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        VALID_ORDER,
+        VALID_IDEMPOTENCY_KEY,
+    );
+    const replay = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        VALID_ORDER,
+        VALID_IDEMPOTENCY_KEY,
+    );
+
+    assert.equal(first.status, 201);
+    assert.equal(replay.status, 200);
+    assert.deepEqual(await replay.json(), {
+        status: 'success',
+        data: {
+            status: 'success',
+            orderIds: ['mock-idempotent-order'],
+        },
+    });
+    assert.equal(submissionCalls, 1);
+});
+
+test('hashes the idempotency key before persisting the intent', async (t) => {
+    const temporaryDirectory = mkdtempSync(
+        path.join(tmpdir(), 'alphaforge-key-hash-test-'),
+    );
+    const store = createOrderIntentStore({
+        databasePath: path.join(
+            temporaryDirectory,
+            'order-intents.sqlite',
+        ),
+    });
+    t.after(() => {
+        store.close();
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+    });
+    const { baseUrl } = await startServer(t, {
+        orderIntentStore: store,
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => ({
+            status: 'success',
+            orderIds: ['mock-key-hash-order'],
+        }),
+    });
+
+    const response = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        VALID_ORDER,
+        VALID_IDEMPOTENCY_KEY,
+    );
+    assert.equal(response.status, 201);
+
+    const database = new Database(store.databasePath, { readonly: true });
+    try {
+        const row = database.prepare(
+            'SELECT key_hash FROM order_intents',
+        ).get();
+        assert.equal(
+            row.key_hash,
+            createHash('sha256')
+                .update(VALID_IDEMPOTENCY_KEY)
+                .digest('hex'),
+        );
+        assert.notEqual(row.key_hash, VALID_IDEMPOTENCY_KEY);
+    } finally {
+        database.close();
+    }
+});
+
+test('rejects reuse of an idempotency key for a different order payload', async (t) => {
+    let submissionCalls = 0;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalls++;
+            return { status: 'success', orderIds: ['mock-idempotent-order'] };
+        },
+    });
+
+    const first = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        VALID_ORDER,
+        VALID_IDEMPOTENCY_KEY,
+    );
+    const conflict = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        { ...VALID_ORDER, quantity: 2 },
+        VALID_IDEMPOTENCY_KEY,
+    );
+
+    assert.equal(first.status, 201);
+    assert.equal(conflict.status, 409);
+    assert.equal(submissionCalls, 1);
+});
+
+test('serializes concurrent duplicate requests through the durable claim', async (t) => {
+    let submissionCalls = 0;
+    let releaseSubmission;
+    let signalProviderStarted;
+    const providerStarted = new Promise(resolve => {
+        signalProviderStarted = resolve;
+    });
+    const providerBlocked = new Promise(resolve => {
+        releaseSubmission = resolve;
+    });
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalls++;
+            signalProviderStarted();
+            await providerBlocked;
+            return {
+                status: 'success',
+                orderIds: ['mock-concurrent-order'],
+            };
+        },
+    });
+
+    const firstPromise = postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        VALID_ORDER,
+        VALID_IDEMPOTENCY_KEY,
+    );
+    try {
+        await providerStarted;
+        const duplicate = await postOrder(
+            baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            VALID_IDEMPOTENCY_KEY,
+        );
+
+        assert.equal(duplicate.status, 202);
+        assert.equal((await duplicate.json()).state, 'SUBMITTING');
+    } finally {
+        releaseSubmission();
+    }
+
+    assert.equal((await firstPromise).status, 201);
+    assert.equal(submissionCalls, 1);
+});
+
+test('does not resubmit an order after an ambiguous provider failure', async (t) => {
+    let submissionCalls = 0;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalls++;
+            throw new Error('simulated connection timeout');
+        },
+    });
+
+    const first = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        VALID_ORDER,
+        VALID_IDEMPOTENCY_KEY,
+    );
+    const retry = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        VALID_ORDER,
+        VALID_IDEMPOTENCY_KEY,
+    );
+
+    assert.equal(first.status, 202);
+    assert.equal((await first.json()).state, 'UNKNOWN');
+    assert.equal(retry.status, 202);
+    assert.equal((await retry.json()).state, 'UNKNOWN');
+    assert.equal(submissionCalls, 1);
+});
+
+test('does not resubmit after a malformed successful provider response', async (t) => {
+    const riskEnvironment = {
+        UPSTOX_SANDBOX_ALLOWED_INSTRUMENTS:
+            process.env.UPSTOX_SANDBOX_ALLOWED_INSTRUMENTS,
+        UPSTOX_SANDBOX_MAX_ORDER_QUANTITY:
+            process.env.UPSTOX_SANDBOX_MAX_ORDER_QUANTITY,
+        UPSTOX_SANDBOX_MAX_ORDER_NOTIONAL:
+            process.env.UPSTOX_SANDBOX_MAX_ORDER_NOTIONAL,
+    };
+    process.env.UPSTOX_SANDBOX_ALLOWED_INSTRUMENTS =
+        TEST_RISK_CONFIG.allowedInstruments.join(',');
+    process.env.UPSTOX_SANDBOX_MAX_ORDER_QUANTITY =
+        String(TEST_RISK_CONFIG.maxQuantity);
+    process.env.UPSTOX_SANDBOX_MAX_ORDER_NOTIONAL =
+        String(TEST_RISK_CONFIG.maxNotional);
+
+    let providerCalls = 0;
+    try {
+        const { baseUrl } = await startServer(t, {
+            localApiToken: VALID_API_TOKEN,
+            submitOrder: order => submitSandboxLimitOrder(order, {
+                clientFactory: () => ({
+                    sandbox: true,
+                    basePath: 'https://api-sandbox.upstox.com',
+                    orderBasePath: 'https://api-sandbox.upstox.com',
+                }),
+                orderApiFactory: () => ({
+                    placeOrder: (request, options, callback) => {
+                        providerCalls++;
+                        callback(null, {
+                            status: 'success',
+                            data: {
+                                orderIds: ['mock-valid-order-id', null],
+                            },
+                        });
+                    },
+                }),
+            }),
+        });
+
+        const first = await postOrder(
+            baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            VALID_IDEMPOTENCY_KEY,
+        );
+        const retry = await postOrder(
+            baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            VALID_IDEMPOTENCY_KEY,
+        );
+
+        assert.equal(first.status, 202);
+        assert.equal((await first.json()).state, 'UNKNOWN');
+        assert.equal(retry.status, 202);
+        assert.equal((await retry.json()).state, 'UNKNOWN');
+        assert.equal(providerCalls, 1);
+    } finally {
+        for (const [name, value] of Object.entries(riskEnvironment)) {
+            if (value === undefined) {
+                delete process.env[name];
+            } else {
+                process.env[name] = value;
+            }
+        }
+    }
+});
+
+test('reopens the database and replays a persisted submission result', async (t) => {
+    const temporaryDirectory = mkdtempSync(
+        path.join(tmpdir(), 'alphaforge-restart-test-'),
+    );
+    const databasePath = path.join(
+        temporaryDirectory,
+        'order-intents.sqlite',
+    );
+    const firstStore = createOrderIntentStore({ databasePath });
+    let submissionCalls = 0;
+    let firstServer;
+    let reopenedStore;
+    let restartedServer;
+    try {
+        firstServer = await startServer(t, {
+            orderIntentStore: firstStore,
+            localApiToken: VALID_API_TOKEN,
+            submitOrder: async () => {
+                submissionCalls++;
+                return {
+                    status: 'success',
+                    orderIds: ['mock-restart-order'],
+                };
+            },
+        });
+
+        const first = await postOrder(
+            firstServer.baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            VALID_IDEMPOTENCY_KEY,
+        );
+        assert.equal(first.status, 201);
+        await firstServer.shutdown();
+        firstStore.close();
+
+        reopenedStore = createOrderIntentStore({ databasePath });
+        restartedServer = await startServer(t, {
+            orderIntentStore: reopenedStore,
+            localApiToken: VALID_API_TOKEN,
+            submitOrder: async () => {
+                submissionCalls++;
+                return {
+                    status: 'success',
+                    orderIds: ['unexpected-resubmit'],
+                };
+            },
+        });
+
+        const replay = await postOrder(
+            restartedServer.baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            VALID_IDEMPOTENCY_KEY,
+        );
+
+        assert.equal(replay.status, 200);
+        assert.deepEqual((await replay.json()).data.orderIds, [
+            'mock-restart-order',
+        ]);
+        assert.equal(submissionCalls, 1);
+    } finally {
+        await restartedServer?.shutdown();
+        await firstServer?.shutdown();
+        reopenedStore?.close();
+        firstStore.close();
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+});
+
+test('recovers persisted SUBMITTING intents as UNKNOWN after restart', async (t) => {
+    const temporaryDirectory = mkdtempSync(
+        path.join(tmpdir(), 'alphaforge-recovery-test-'),
+    );
+    const databasePath = path.join(
+        temporaryDirectory,
+        'order-intents.sqlite',
+    );
+    let now = 1_000_000;
+    const firstStore = createOrderIntentStore({
+        databasePath,
+        now: () => now,
+        staleAfterMs: 1_000,
+    });
+    const keyHash = createHash('sha256')
+        .update(VALID_IDEMPOTENCY_KEY)
+        .digest('hex');
+    firstStore.claim(keyHash, 'b'.repeat(64), VALID_ORDER);
+    firstStore.close();
+
+    now += 1_001;
+    const recoveredStore = createOrderIntentStore({
+        databasePath,
+        now: () => now,
+        staleAfterMs: 1_000,
+    });
+    t.after(() => {
+        recoveredStore.close();
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+    });
+    const recovered = recoveredStore.claim(
+        keyHash,
+        'b'.repeat(64),
+        VALID_ORDER,
+    );
+
+    assert.equal(recovered.created, false);
+    assert.equal(recovered.intent.state, 'UNKNOWN');
+});
+
+test('persists confirmed provider rejections and does not retry them', async (t) => {
+    let submissionCalls = 0;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalls++;
+            throw new ConfirmedSandboxOrderRejectionError();
+        },
+    });
+
+    const first = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        VALID_ORDER,
+        VALID_IDEMPOTENCY_KEY,
+    );
+    const replay = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        VALID_ORDER,
+        VALID_IDEMPOTENCY_KEY,
+    );
+
+    assert.equal(first.status, 422);
+    assert.equal((await first.json()).state, 'REJECTED');
+    assert.equal(replay.status, 422);
+    assert.equal((await replay.json()).state, 'REJECTED');
+    assert.equal(submissionCalls, 1);
+});
+
+test('fails closed when the order-intent database cannot be initialized', async (t) => {
+    let submissionCalls = 0;
+    const temporaryDirectory = mkdtempSync(
+        path.join(tmpdir(), 'alphaforge-init-failure-'),
+    );
+    t.after(() => rmSync(temporaryDirectory, { recursive: true, force: true }));
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        orderIntentStoreFactory: () =>
+            createOrderIntentStore({ databasePath: temporaryDirectory }),
+        submitOrder: async () => {
+            submissionCalls++;
+            return {};
+        },
+    });
+
+    const response = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+    );
+
+    assert.equal(response.status, 503);
+    assert.equal(submissionCalls, 0);
+});
+
+test('fails closed when the order-intent database write fails', async (t) => {
+    let submissionCalls = 0;
+    const temporaryDirectory = mkdtempSync(
+        path.join(tmpdir(), 'alphaforge-write-failure-'),
+    );
+    t.after(() => rmSync(temporaryDirectory, { recursive: true, force: true }));
+    const closedStore = createOrderIntentStore({
+        databasePath: path.join(
+            temporaryDirectory,
+            'order-intents.sqlite',
+        ),
+    });
+    closedStore.close();
+
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        orderIntentStore: closedStore,
+        submitOrder: async () => {
+            submissionCalls++;
+            return {};
+        },
+    });
+    const response = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+    );
+
+    assert.equal(response.status, 503);
+    assert.equal(submissionCalls, 0);
+});
+
+test('does not resubmit when persisting a provider result fails', async (t) => {
+    const temporaryDirectory = mkdtempSync(
+        path.join(tmpdir(), 'alphaforge-result-write-failure-'),
+    );
+    const databasePath = path.join(
+        temporaryDirectory,
+        'order-intents.sqlite',
+    );
+    const firstStore = createOrderIntentStore({ databasePath });
+    let submissionCalls = 0;
+    let firstServer;
+    let reopenedStore;
+    let restartedServer;
+
+    try {
+        firstServer = await startServer(t, {
+            orderIntentStore: firstStore,
+            localApiToken: VALID_API_TOKEN,
+            submitOrder: async () => {
+                submissionCalls++;
+                firstStore.close();
+                return {
+                    status: 'success',
+                    orderIds: ['mock-result-write-failure'],
+                };
+            },
+        });
+
+        const firstResponse = await postOrder(
+            firstServer.baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            VALID_IDEMPOTENCY_KEY,
+        );
+        assert.equal(firstResponse.status, 503);
+        assert.equal(submissionCalls, 1);
+        await firstServer.shutdown();
+
+        reopenedStore = createOrderIntentStore({ databasePath });
+        restartedServer = await startServer(t, {
+            orderIntentStore: reopenedStore,
+            localApiToken: VALID_API_TOKEN,
+            submitOrder: async () => {
+                submissionCalls++;
+                return {
+                    status: 'success',
+                    orderIds: ['unexpected-resubmit'],
+                };
+            },
+        });
+
+        const retry = await postOrder(
+            restartedServer.baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            VALID_IDEMPOTENCY_KEY,
+        );
+        assert.equal(retry.status, 202);
+        assert.equal((await retry.json()).state, 'SUBMITTING');
+        assert.equal(submissionCalls, 1);
+    } finally {
+        await restartedServer?.shutdown();
+        await firstServer?.shutdown();
+        firstStore.close();
+        reopenedStore?.close();
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
 });

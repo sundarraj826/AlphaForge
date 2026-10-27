@@ -34,8 +34,41 @@ that precision or range are rejected rather than rounded.
 
 `POST /api/orders` requires `Authorization: Bearer <local-token>`. CORS remains
 restricted to the exact local Angular origin `http://localhost:4200`; CORS is
-not authentication. Its preflight response permits the `Authorization` and
-`Content-Type` headers only for that origin.
+not authentication. Its preflight response permits the `Authorization`,
+`Content-Type`, and `Idempotency-Key` headers only for that origin.
+
+Order submission also requires `ALPHAFORGE_ORDER_INTENTS_DB_PATH` to be an
+absolute path for a SQLite database outside the repository. The API creates
+the parent directory when needed. If the path is missing, invalid, or the
+database cannot be opened or written, order submissions fail closed with
+`503`; other API features remain available. The database stores order
+intents, validated order fields, their state, and successful order IDs/results.
+It never stores the local API token or Upstox access token. Keep the database
+in a user-private application-data directory and do not commit it.
+
+`POST /api/orders` also requires a valid `Idempotency-Key` header (16-128
+URL-safe characters). The raw key is SHA-256 hashed before storage. The
+validated order payload is fingerprinted; reusing a key with a different
+payload returns `409`.
+
+The intent is transactionally recorded as `SUBMITTING` before the provider is
+called. A confirmed successful response and its order IDs are persisted as
+`SUBMITTED`; replaying that key and payload returns the saved result without a
+new provider call. `REJECTED` is stored only for an explicit structured
+provider rejection response. Network errors, timeouts, malformed responses,
+and other uncertain outcomes become `UNKNOWN`. Replaying an `UNKNOWN` or
+currently `SUBMITTING` intent returns `202` and never resubmits it. A stale
+`SUBMITTING` record (older than 60 seconds) is conservatively changed to
+`UNKNOWN` on startup and before a new claim.
+
+There is no automatic retry or guaranteed automatic reconciliation. If a
+provider outcome is `UNKNOWN`, use the stored intent and known provider order
+IDs (if any) for manual investigation. The current order lookup requires a
+known order ID; automatic reconciliation by a client reference or tag is not
+implemented because Sandbox lookup guarantees have not been verified.
+
+CORS preflight also permits the `Idempotency-Key` header, still only for the
+exact local Angular origin described above.
 
 `GET /api/orders/:id` remains unauthenticated and read-only for the local order
 lookup UI. It is reachable only through the loopback-bound API, but other

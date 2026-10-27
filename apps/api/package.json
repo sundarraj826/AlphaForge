@@ -3,17 +3,16 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  
-"scripts": {
-  "start": "node src/server.mjs",
-  "test": "node --test src/config/upstox.config.spec.mjs src/config/order-risk.config.spec.mjs src/server.spec.mjs src/services/upstox-order.service.spec.mjs src/services/upstox-order-submit.service.spec.mjs"
-},
-
+  "scripts": {
+    "start": "node src/server.mjs",
+    "test": "node --test src/config/upstox.config.spec.mjs src/config/order-risk.config.spec.mjs src/config/order-intent.config.spec.mjs src/server.spec.mjs src/routes/market-candles.routes.spec.mjs src/services/market-candle-mapper.spec.mjs src/services/market-candle-provider.spec.mjs src/services/upstox-historical-candle-provider.spec.mjs src/services/upstox-order.service.spec.mjs src/services/upstox-order-submit.service.spec.mjs src/storage/order-intent.store.spec.mjs"
+  },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "packageManager": "pnpm@10.34.4",
   "dependencies": {
+    "better-sqlite3": "12.4.1",
     "dotenv": "^18.0.7",
     "upstox-js-sdk": "^2.31.0"
   }

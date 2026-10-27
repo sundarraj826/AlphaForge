@@ -3,19 +3,28 @@ import 'dotenv/config';
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer as createHttpServer } from 'node:http';
 
-import { submitSandboxLimitOrder } from './services/upstox-order-submit.service.mjs';
+import {
+    ConfirmedSandboxOrderRejectionError,
+    submitSandboxLimitOrder,
+} from './services/upstox-order-submit.service.mjs';
 import { getSandboxOrderDetails } from './services/upstox-order.service.mjs';
 import { handleMarketCandles } from './routes/market-candles.routes.mjs';
 import {
     loadSandboxOrderRiskConfig,
     validateSandboxLimitOrder,
 } from './config/order-risk.config.mjs';
+import { loadOrderIntentDatabasePath } from './config/order-intent.config.mjs';
+import {
+    createOrderIntentStore,
+    OrderIntentStoreError,
+} from './storage/order-intent.store.mjs';
 
 
 const PORT = Number(process.env.PORT) || 3000;
 const API_HOST = '127.0.0.1';
 const MAX_BODY_SIZE = 1024 * 1024;
 const LOCAL_API_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,}$/;
+const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._~-]{16,128}$/;
 
 const ALLOWED_ORIGIN = 'http://localhost:4200';
 
@@ -56,7 +65,7 @@ function setCorsHeaders(request, response) {
         );
         response.setHeader(
             'Access-Control-Allow-Headers',
-            'Content-Type, Authorization',
+            'Content-Type, Authorization, Idempotency-Key',
         );
     }
 }
@@ -99,9 +108,43 @@ export function createApiServer({
     localApiToken = process.env.ALPHAFORGE_LOCAL_API_TOKEN,
     submitOrder = submitSandboxLimitOrder,
     loadOrderRiskConfig = loadSandboxOrderRiskConfig,
+    orderIntentStore: injectedOrderIntentStore,
+    orderIntentStoreFactory = () =>
+        createOrderIntentStore({
+            databasePath: loadOrderIntentDatabasePath(),
+        }),
 } = {}) {
     const configuredLocalApiToken =
         getConfiguredLocalApiToken(localApiToken);
+    let orderIntentStore = injectedOrderIntentStore;
+    let orderIntentStoreInitializationError;
+
+    if (!orderIntentStore) {
+        try {
+            orderIntentStore = orderIntentStoreFactory();
+        } catch {
+            orderIntentStoreInitializationError =
+                new OrderIntentStoreError();
+        }
+    }
+
+    function getOrderIntentStore() {
+        if (orderIntentStoreInitializationError) {
+            throw orderIntentStoreInitializationError;
+        }
+
+        if (!orderIntentStore) {
+            try {
+                orderIntentStore = orderIntentStoreFactory();
+            } catch {
+                orderIntentStoreInitializationError =
+                    new OrderIntentStoreError();
+                throw orderIntentStoreInitializationError;
+            }
+        }
+
+        return orderIntentStore;
+    }
 
     return createHttpServer(async (request, response) => {
         setCorsHeaders(request, response);
@@ -179,12 +222,90 @@ export function createApiServer({
                     });
                 }
 
+                const idempotencyKey =
+                    request.headers['idempotency-key'];
+                if (
+                    typeof idempotencyKey !== 'string' ||
+                    !IDEMPOTENCY_KEY_PATTERN.test(idempotencyKey)
+                ) {
+                    return sendJson(response, 400, {
+                        status: 'error',
+                        message: 'A valid Idempotency-Key header is required.',
+                    });
+                }
+
                 const order = await readJsonBody(request);
                 const riskConfig = loadOrderRiskConfig();
                 const validatedOrder =
                     validateSandboxLimitOrder(order, riskConfig);
 
-                const result = await submitOrder(validatedOrder);
+                const keyHash = createHash('sha256')
+                    .update(idempotencyKey)
+                    .digest('hex');
+                const fingerprint = createHash('sha256')
+                    .update(JSON.stringify(validatedOrder))
+                    .digest('hex');
+                const store = getOrderIntentStore();
+                const claim = store.claim(
+                    keyHash,
+                    fingerprint,
+                    validatedOrder,
+                );
+
+                if (!claim.created) {
+                    if (claim.intent.state === 'SUBMITTED') {
+                        return sendJson(response, 200, {
+                            status: 'success',
+                            data: claim.intent.result,
+                        });
+                    }
+
+                    if (claim.intent.state === 'REJECTED') {
+                        return sendJson(response, 422, {
+                            status: 'error',
+                            state: 'REJECTED',
+                            message:
+                                'Upstox Sandbox confirmed that the order was rejected.',
+                        });
+                    }
+
+                    return sendJson(response, 202, {
+                        status: 'pending',
+                        state: claim.intent.state,
+                        message:
+                            claim.intent.state === 'UNKNOWN'
+                                ? 'The submission outcome is unknown; this key will not submit again.'
+                                : 'The submission is still in progress.',
+                    });
+                }
+
+                let result;
+                try {
+                    result = await submitOrder(validatedOrder);
+                } catch (error) {
+                    if (
+                        error instanceof
+                        ConfirmedSandboxOrderRejectionError
+                    ) {
+                        store.markRejected(keyHash);
+                        return sendJson(response, 422, {
+                            status: 'error',
+                            state: 'REJECTED',
+                            message:
+                                'Upstox Sandbox confirmed that the order was rejected.',
+                        });
+                    }
+
+                    store.markUnknown(keyHash);
+                    return sendJson(response, 202, {
+                        status: 'pending',
+                        state: 'UNKNOWN',
+                        message:
+                            'The submission outcome is unknown; this key will not submit again.',
+                    });
+                }
+
+                store.markSubmitted(keyHash, result);
 
                 return sendJson(response, 201, {
                     status: 'success',
@@ -203,17 +324,24 @@ export function createApiServer({
             }
 
             const statusCode = error.statusCode ?? 502;
+            let message = 'The API request could not be completed.';
+
+            if (
+                statusCode === 400 ||
+                statusCode === 413 ||
+                statusCode === 422 ||
+                statusCode === 409
+            ) {
+                message = error.message;
+            } else if (statusCode === 503) {
+                message = error instanceof OrderIntentStoreError
+                    ? 'Order submission persistence is unavailable.'
+                    : 'Order submission risk limits are unavailable.';
+            }
 
             return sendJson(response, statusCode, {
                 status: 'error',
-                message:
-                    statusCode === 400 ||
-                    statusCode === 413 ||
-                    statusCode === 422
-                        ? error.message
-                        : statusCode === 503
-                            ? 'Order submission risk limits are unavailable.'
-                            : 'The API request could not be completed.',
+                message,
             });
         }
     });
