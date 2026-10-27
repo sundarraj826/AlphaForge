@@ -3,6 +3,7 @@ import { MockMarketCandleProvider } from '../services/market-candle-provider.mjs
 import {
     UpstoxHistoricalCandleProvider,
 } from '../services/upstox-historical-candle-provider.mjs';
+import { UPSTOX_HISTORICAL_INSTRUMENT_KEYS } from '../config/upstox-instruments.mjs';
 
 const mockProvider = new MockMarketCandleProvider();
 const historicalProvider = new UpstoxHistoricalCandleProvider();
@@ -16,7 +17,11 @@ function sendJson(response, statusCode, body) {
     response.end(JSON.stringify(body));
 }
 
-export async function handleMarketCandles(request, response) {
+export async function handleMarketCandles(
+    request,
+    response,
+    { historicalProvider: provider = historicalProvider } = {},
+) {
     try {
         const url = new URL(
             request.url ?? '/api/market/candles',
@@ -44,6 +49,7 @@ export async function handleMarketCandles(request, response) {
 
         const fromDate = url.searchParams.get('fromDate');
         const toDate = url.searchParams.get('toDate');
+        const strategyInstrument = url.searchParams.get('instrument');
 
         if (!fromDate || !toDate) {
             return sendJson(response, 400, {
@@ -52,8 +58,24 @@ export async function handleMarketCandles(request, response) {
             });
         }
 
-        const candles = await historicalProvider.getHistoricalCandles({
-            instrumentKey: 'NSE_INDEX|Nifty 50',
+        const instrumentKey =
+            strategyInstrument !== null &&
+                Object.hasOwn(
+                    UPSTOX_HISTORICAL_INSTRUMENT_KEYS,
+                    strategyInstrument,
+                )
+                ? UPSTOX_HISTORICAL_INSTRUMENT_KEYS[strategyInstrument]
+                : undefined;
+
+        if (!instrumentKey) {
+            return sendJson(response, 400, {
+                status: 'error',
+                message: 'Unsupported historical instrument.',
+            });
+        }
+
+        const candles = await provider.getHistoricalCandles({
+            instrumentKey,
             interval: 5,
             fromDate,
             toDate,

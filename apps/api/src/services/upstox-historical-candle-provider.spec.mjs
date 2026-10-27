@@ -15,6 +15,7 @@ test('rejects requests when the market-data token is missing', async () => {
 
         await assert.rejects(
             provider.getHistoricalCandles({
+                instrumentKey: 'NSE_INDEX|Nifty 50',
                 fromDate: '2026-10-01',
                 toDate: '2026-10-02',
             }),
@@ -34,10 +35,23 @@ test('rejects invalid date ranges before making a request', async () => {
 
     await assert.rejects(
         provider.getHistoricalCandles({
+            instrumentKey: 'NSE_INDEX|Nifty 50',
             fromDate: '2026-10-10',
             toDate: '2026-10-01',
         }),
         /Invalid historical candle date range/,
+    );
+});
+
+test('requires an explicit instrument key instead of using a fallback', async () => {
+    const provider = new UpstoxHistoricalCandleProvider();
+
+    await assert.rejects(
+        provider.getHistoricalCandles({
+            fromDate: '2026-10-23',
+            toDate: '2026-10-23',
+        }),
+        /A supported instrument key is required/,
     );
 });
 

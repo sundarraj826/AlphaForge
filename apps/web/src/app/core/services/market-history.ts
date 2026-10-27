@@ -1,6 +1,6 @@
 
 import { inject, Service, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 import { MarketCandle } from '../models/market-candle.model';
@@ -17,6 +17,7 @@ interface MarketCandlesApiResponse {
 
 interface LoadCandlesOptions {
     source?: CandleSource;
+    instrument?: string;
     fromDate?: string;
     toDate?: string;
 }
@@ -47,14 +48,15 @@ export class MarketHistoryService {
             let url = 'http://localhost:3000/api/market/candles';
 
             if (source === 'upstox') {
-                if (!options.fromDate || !options.toDate) {
+                if (!options.instrument || !options.fromDate || !options.toDate) {
                     throw new Error(
-                        'Select both start and end dates for historical data.',
+                        'Select a supported instrument and both start and end dates for historical data.',
                     );
                 }
 
                 url +=
                     `?source=upstox` +
+                    `&instrument=${encodeURIComponent(options.instrument)}` +
                     `&fromDate=${encodeURIComponent(options.fromDate)}` +
                     `&toDate=${encodeURIComponent(options.toDate)}`;
             }
@@ -82,9 +84,12 @@ export class MarketHistoryService {
             this._source.set(null);
 
             this._error.set(
-                error instanceof Error
-                    ? error.message
-                    : 'Unable to load market candles. Check the AlphaForge API.',
+                error instanceof HttpErrorResponse &&
+                    typeof error.error?.message === 'string'
+                    ? error.error.message
+                    : error instanceof Error
+                        ? error.message
+                        : 'Unable to load market candles. Check the AlphaForge API.',
             );
         } finally {
             this._loading.set(false);

@@ -134,6 +134,7 @@ export class BacktestHome {
 
     await this._marketHistoryService.loadCandles({
       source: 'upstox',
+      instrument: strategy.instrument,
       fromDate: this.formatDate(this.startDate),
       toDate: this.formatDate(this.endDate),
     });

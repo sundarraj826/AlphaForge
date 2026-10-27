@@ -25,7 +25,7 @@ describe('Backtest', () => {
   const indianStrategy: Strategy = {
     id: 'indian-strategy',
     name: 'Indian Intraday',
-    instrument: 'TEST',
+    instrument: 'NIFTY50',
     market: 'INDIAN_EQUITY_INTRADAY',
     timeframe: '15m',
     status: 'Active',
@@ -95,7 +95,12 @@ describe('Backtest', () => {
   it('runs an Indian intraday backtest with the named cost profile', async () => {
     await component.runBacktest();
 
-    expect(marketHistoryService.loadCandles).toHaveBeenCalledOnce();
+    expect(marketHistoryService.loadCandles).toHaveBeenCalledWith({
+      source: 'upstox',
+      instrument: 'NIFTY50',
+      fromDate: '2026-01-01',
+      toDate: '2026-01-01',
+    });
     expect(backtestingService.runBacktest).toHaveBeenCalledWith(
       indianStrategy,
       candles,

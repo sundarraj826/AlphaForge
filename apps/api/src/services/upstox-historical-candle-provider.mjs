@@ -6,7 +6,7 @@ const BASE_URL = 'https://api.upstox.com/v3';
 export class UpstoxHistoricalCandleProvider {
 
     async getHistoricalCandles({
-        instrumentKey = 'NSE_INDEX|Nifty 50',
+        instrumentKey,
         interval = 5,
         fromDate,
         toDate,
@@ -14,6 +14,10 @@ export class UpstoxHistoricalCandleProvider {
         // 1. Validate required dates first.
         if (!fromDate || !toDate) {
             throw new Error('fromDate and toDate are required.');
+        }
+
+        if (typeof instrumentKey !== 'string' || !instrumentKey.trim()) {
+            throw new Error('A supported instrument key is required.');
         }
 
         const datePattern = /^\d{4}-\d{2}-\d{2}$/;
