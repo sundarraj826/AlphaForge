@@ -15,3 +15,65 @@
 <section class="api-health">
     <strong>Backend API:</strong> {{ apiStatus }}
 </section>
+
+<section class="proposal-history" aria-labelledby="proposal-history-title">
+    <header class="proposal-history-header">
+        <div>
+            <h2 id="proposal-history-title">Saved Paper Proposals</h2>
+            <p>Informational signals only; risk has not been evaluated and these are not executable orders.</p>
+        </div>
+        @if (proposalsError() && paperProposals().length === 0) {
+        <button type="button" (click)="loadPaperProposals()" [disabled]="proposalsLoading()">
+            Retry
+        </button>
+        }
+    </header>
+
+    @if (proposalsLoading() && paperProposals().length === 0) {
+    <p role="status">Loading paper proposals...</p>
+    }
+
+    @if (proposalsError()) {
+    <p class="proposal-error" role="alert">{{ proposalsError() }}</p>
+    }
+
+    @if (!proposalsLoading() && paperProposals().length === 0 && !proposalsError()) {
+    <p>No saved paper proposals yet.</p>
+    }
+
+    @if (paperProposals().length > 0) {
+    <div class="proposal-list">
+        @for (proposal of paperProposals(); track proposal.proposalId) {
+        <article class="proposal-card">
+            <div class="proposal-card-heading">
+                <h3>{{ proposal.payload.instrument }} · {{ proposal.payload.side }}</h3>
+                <span>{{ proposal.payload.timeframe }}</span>
+            </div>
+            <p>
+                Reference price:
+                {{ proposal.payload.referencePrice | number:'1.2-2' }}
+            </p>
+            <p>
+                Signal:
+                {{ proposal.payload.signalTimestamp | date:'medium' }}
+                · Saved:
+                {{ proposal.createdAt | date:'medium' }}
+            </p>
+            <p class="proposal-risk-note">
+                Informational only — risk check not evaluated; order execution unavailable.
+            </p>
+        </article>
+        }
+    </div>
+
+    @if (proposalsError() && proposalsNextCursor()) {
+    <button type="button" (click)="loadMorePaperProposals()" [disabled]="proposalsLoadingMore()">
+        Retry loading more
+    </button>
+    } @else if (proposalsNextCursor()) {
+    <button type="button" (click)="loadMorePaperProposals()" [disabled]="proposalsLoadingMore()">
+        {{ proposalsLoadingMore() ? 'Loading...' : 'Load more' }}
+    </button>
+    }
+    }
+</section>

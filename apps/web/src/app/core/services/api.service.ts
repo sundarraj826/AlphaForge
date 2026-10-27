@@ -1,6 +1,10 @@
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Service } from '@angular/core';
 import { Observable } from 'rxjs';
+import {
+    PaperProposalPageResponse,
+    PaperProposalQuery,
+} from '../models/paper-proposal.model';
 
 export interface ApiHealthResponse {
     status: string;
@@ -23,7 +27,20 @@ export class ApiService {
         return this._http.get<unknown>(`${this._baseUrl}/orders/${encodeURIComponent(orderId.trim())}`)
     }
 
-    getPaperProposals(): Observable<unknown> {
-        return this._http.get<unknown>('/api/paper-proposals')
+    getPaperProposals(
+        query: PaperProposalQuery = {},
+    ): Observable<PaperProposalPageResponse> {
+        let params = new HttpParams();
+        if (query.limit !== undefined) {
+            params = params.set('limit', query.limit);
+        }
+        if (query.cursor !== undefined) {
+            params = params.set('cursor', query.cursor);
+        }
+
+        return this._http.get<PaperProposalPageResponse>(
+            '/api/paper-proposals',
+            { params },
+        );
     }
 }
