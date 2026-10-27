@@ -74,3 +74,12 @@ exact local Angular origin described above.
 lookup UI. It is reachable only through the loopback-bound API, but other
 processes running as the same user can access it. The API continues to use the
 Upstox Sandbox host and existing Sandbox credential checks.
+
+The standalone candle eligibility helper is not connected to strategy
+execution or order submission. It validates ordered, unique candle timestamps,
+uses a session/calendar policy to determine candle end times, and applies a
+configured elapsed-time delay and freshness limit. The elapsed-time rule is a
+heuristic only; it does not prove that Upstox has finalized a candle or will
+not revise it. Confirm the provider's finality semantics, timeframe alignment,
+exchange timezone, session schedule, holiday calendar, and delivery delay before
+using this helper to generate actionable proposals.
