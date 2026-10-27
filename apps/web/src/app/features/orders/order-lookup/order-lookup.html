@@ -1,0 +1,47 @@
+<section class="order-lookup">
+    <header class="page-header">
+        <div>
+            <h1>Sandbox Order Lookup</h1>
+            <p>Retrieve details for an existing Upstox Sandbox order.</p>
+        </div>
+
+        <span class="environment-badge">
+            Sandbox
+        </span>
+    </header>
+
+    <div class="lookup-card">
+        <form (submit)="lookupOrder($event)">
+            <label for="orderId">Order ID</label>
+
+            <div class="search-row">
+                <input id="orderId" name="orderId" type="text" [value]="orderId()"
+                    (input)="orderId.set($any($event.target).value)" placeholder="Enter an existing Sandbox order ID"
+                    autocomplete="off" required />
+
+                <button type="submit" [disabled]="loading()">
+                    {{ loading() ? 'Loading...' : 'Get Details' }}
+                </button>
+            </div>
+        </form>
+
+        @if (loading()) {
+        <p class="loading-message" role="status">
+            Retrieving order details...
+        </p>
+        }
+
+        @if (errorMessage()) {
+        <div class="error-message" role="alert">
+            {{ errorMessage() }}
+        </div>
+        }
+
+        @if (orderDetails(); as order) {
+        <div class="result-section">
+            <h2>Order Response</h2>
+            <pre>{{ order | json }}</pre>
+        </div>
+        }
+    </div>
+</section>

@@ -13,6 +13,9 @@ describe('SummaryCard', () => {
 
     fixture = TestBed.createComponent(SummaryCard);
     component = fixture.componentInstance;
+    fixture.componentRef.setInput('title', 'Test title');
+    fixture.componentRef.setInput('value', 'Test value');
+    fixture.detectChanges();
     await fixture.whenStable();
   });
 

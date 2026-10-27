@@ -10,4 +10,6 @@ export class DashboardService {
         openPositions: 5,
         winRate: 68
     });
+
+
 }

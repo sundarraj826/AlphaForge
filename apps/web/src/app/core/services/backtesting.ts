@@ -9,6 +9,7 @@ import { StrategyService } from './strategy';
 import { TradingCostService } from './trading-cost';
 import { TradingCostConfig } from '../models/trading-cost.model';
 import { PositionSizingService } from './position-sizing';
+import { TradingSessionService } from './trading-session';
 
 @Service()
 export class BacktestingService {
@@ -16,6 +17,7 @@ export class BacktestingService {
     readonly strategyService = inject(StrategyService);
     readonly tradingCostService = inject(TradingCostService);
     readonly positionSizingService = inject(PositionSizingService);
+    readonly tradingSessionService = inject(TradingSessionService);
 
     runBacktest(
         strategy: Strategy,
@@ -28,23 +30,76 @@ export class BacktestingService {
         riskPercent: number = 0
     ): BacktestResult {
 
-        const filteredCandles = candles.filter(candle => {
-            if (
-                startTimestamp !== undefined &&
-                candle.timestamp < startTimestamp
-            ) {
-                return false;
-            }
+        if (!Array.isArray(candles)) {
+            throw new Error('Candles must be an array.');
+        }
 
-            if (
-                endTimestamp !== undefined &&
-                candle.timestamp > endTimestamp
-            ) {
-                return false;
-            }
+        if (!Number.isFinite(initialCapital) || initialCapital <= 0) {
+            throw new Error('Initial capital must be greater than zero.');
+        }
 
-            return true;
-        });
+        if (!Number.isFinite(quantity) || quantity <= 0) {
+            throw new Error('Quantity must be greater than zero.');
+        }
+
+        if (!Number.isFinite(slippagePercent) || slippagePercent < 0) {
+            throw new Error('Slippage percent cannot be negative.');
+        }
+
+        if (
+            startTimestamp !== undefined &&
+            endTimestamp !== undefined &&
+            startTimestamp > endTimestamp
+        ) {
+            throw new Error('Start timestamp must be before end timestamp.');
+        }
+
+        const filteredCandles = candles
+            .filter(candle => {
+                if (
+                    startTimestamp !== undefined &&
+                    candle.timestamp < startTimestamp
+                ) {
+                    return false;
+                }
+
+                if (
+                    endTimestamp !== undefined &&
+                    candle.timestamp > endTimestamp
+                ) {
+                    return false;
+                }
+
+                return true;
+            })
+            .map(candle => {
+                const prices = [
+                    candle.open,
+                    candle.high,
+                    candle.low,
+                    candle.close,
+                ];
+
+                const invalidPrices = prices.some(
+                    price => !Number.isFinite(price) || price <= 0,
+                );
+
+                const invalidCandle =
+                    !Number.isFinite(candle.timestamp) ||
+                    invalidPrices ||
+                    candle.high < Math.max(candle.open, candle.close) ||
+                    candle.low > Math.min(candle.open, candle.close) ||
+                    candle.high < candle.low;
+
+                if (invalidCandle) {
+                    throw new Error(
+                        `Invalid historical candle at timestamp ${candle.timestamp}.`,
+                    );
+                }
+
+                return candle;
+            })
+            .sort((a, b) => a.timestamp - b.timestamp);
 
         const tradingCostConfig: TradingCostConfig = {
             market: 'INDIAN_EQUITY_INTRADAY',
@@ -62,6 +117,7 @@ export class BacktestingService {
 
         let positionSide: 'LONG' | 'NONE' = 'NONE';
         let entryPrice = 0;
+        let pendingBuy = false;
 
         let totalTrades = 0;
         let winningTrades = 0;
@@ -69,6 +125,8 @@ export class BacktestingService {
         let grossLoss = 0;
         let losingTrades = 0;
         let totalProfitLoss = 0;
+        let dailyProfitLoss = 0;
+        let currentTradingDay: string | null = null;
         let totalFees = 0;
         let finalCapital = initialCapital;
 
@@ -83,11 +141,25 @@ export class BacktestingService {
 
         for (let i = 0; i < filteredCandles.length; i++) {
 
+
+
             const candle = filteredCandles[i];
+
+            const candleDate =
+                this.tradingSessionService.getTradingDay(candle.timestamp);
+
+            if (currentTradingDay !== candleDate) {
+                if (currentTradingDay !== null) {
+                    pendingBuy = false;
+                }
+
+                currentTradingDay = candleDate;
+                dailyProfitLoss = 0;
+            }
 
             const candleHistory = filteredCandles.slice(0, i + 1);
 
-            const signal = this.strategyService.evaluateStrategy(
+            let signal = this.strategyService.evaluateStrategy(
                 strategy,
                 candleHistory,
                 positionSide
@@ -100,8 +172,8 @@ export class BacktestingService {
                 initialCapital * (maxDailyLossPercent / 100);
 
             const dailyLoss =
-                totalProfitLoss < 0
-                    ? Math.abs(totalProfitLoss)
+                dailyProfitLoss < 0
+                    ? Math.abs(dailyProfitLoss)
                     : 0;
 
             if (
@@ -113,11 +185,12 @@ export class BacktestingService {
             }
 
 
-            if (positionSide === 'NONE' && signal === 'BUY') {
+            if (positionSide === 'NONE' && pendingBuy) {
                 const slippage =
-                    candle.close * (slippagePercent / 100);
+                    candle.open * (slippagePercent / 100);
 
-                entryPrice = candle.close + slippage;
+                entryPrice = candle.open + slippage;
+                pendingBuy = false;
 
                 if (riskPercent > 0) {
                     const stopLossPercent =
@@ -143,6 +216,14 @@ export class BacktestingService {
 
                 positionSide = 'LONG';
 
+                signal = this.strategyService.evaluateStrategy(
+                    strategy,
+                    candleHistory,
+                    positionSide
+                );
+                // Continue into the existing position-management logic.
+            } else if (positionSide === 'NONE' && signal === 'BUY') {
+                pendingBuy = true;
                 continue;
             }
 
@@ -191,6 +272,7 @@ export class BacktestingService {
 
                     totalTrades++;
                     totalProfitLoss += profitLoss;
+                    dailyProfitLoss += profitLoss;
                     finalCapital = initialCapital + totalProfitLoss;
                     equityCurve.push(finalCapital);
 
@@ -258,7 +340,7 @@ export class BacktestingService {
 
                     totalTrades++;
                     totalProfitLoss += profitLoss;
-
+                    dailyProfitLoss += profitLoss;
                     finalCapital = initialCapital + totalProfitLoss;
 
                     equityCurve.push(finalCapital);
@@ -282,7 +364,7 @@ export class BacktestingService {
                     continue;
                 }
 
-                if (signal === 'SELL') {
+                if (signal === 'SELL' || this.tradingSessionService.isEndOfDay(candle.timestamp)) {
                     const slippage =
                         candle.close * (slippagePercent / 100);
 
@@ -316,7 +398,7 @@ export class BacktestingService {
 
                     totalTrades++;
                     totalProfitLoss += profitLoss;
-
+                    dailyProfitLoss += profitLoss;
                     finalCapital = initialCapital + totalProfitLoss;
 
                     equityCurve.push(finalCapital);

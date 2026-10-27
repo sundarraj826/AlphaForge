@@ -63,9 +63,21 @@
 
 
 
-    <button type="button" (click)="runBacktest()">
-        Run Backtest
+    <button mat-raised-button (click)="runBacktest()" [disabled]="_marketHistoryService.loading()">
+        {{ _marketHistoryService.loading() ? 'Loading candles...' : 'Run Backtest' }}
     </button>
+
+    @if (_marketHistoryService.source(); as source) {
+    <p class="data-source">
+        Data source: {{ source === 'upstox' ? 'Upstox Historical' : 'Mock Data' }}
+    </p>
+    }
+
+    @if (_marketHistoryService.error(); as error) {
+    <p class="error-message" role="alert">
+        {{ error }}
+    </p>
+    }
 
 
 
@@ -162,18 +174,18 @@
         </mat-card>
 
         <mat-card>
-            <mat-card>
-                <mat-card-content>
-                    <div class="summary-label">Max Drawdown %</div>
-                    <div class="summary-value">
-                        {{ backtestResult.maxDrawdownPercent | number:'1.2-2'}}%
-                    </div>
-                </mat-card-content>
-            </mat-card>
+            <mat-card-content>
+                <div class="summary-label">Max Drawdown %</div>
+                <div class="summary-value">
+                    {{ backtestResult.maxDrawdownPercent | number:'1.2-2' }}%
+                </div>
+            </mat-card-content>
         </mat-card>
 
     </div>
     }
+
+    @if (backtestResult) {
 
     <mat-card class="equity-card">
         <mat-card-header>
@@ -200,6 +212,7 @@
             </div>
         </mat-card-content>
     </mat-card>
+    }
 
     @if (backtestResult?.trades?.length) {
     <div class="trade-history">

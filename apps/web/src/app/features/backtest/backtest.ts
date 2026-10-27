@@ -40,7 +40,7 @@ export class BacktestHome {
 
   private readonly _backtestingService = inject(BacktestingService);
   readonly strategyService = inject(StrategyService);
-  private readonly _marketHistoryService = inject(MarketHistoryService);
+  readonly _marketHistoryService = inject(MarketHistoryService);
 
   backtestResult: BacktestResult | null = null;
   equityChartData: ChartData<'line'> = {
@@ -90,52 +90,102 @@ export class BacktestHome {
     'profitLoss'
   ];
 
-  runBacktest(): void {
+
+
+  async runBacktest(): Promise<void> {
+    // Clear previous results so stale data is not mistaken for a new run.
+    this.backtestResult = null;
+    this.equityChartData = {
+      labels: [],
+      datasets: [{ label: 'Equity', data: [], tension: 0.2 }],
+    };
+    this.drawdownChartData = {
+      labels: [],
+      datasets: [{ label: 'Drawdown', data: [], tension: 0.2 }],
+    };
+
     const strategy = this.strategyService
       .strategies()
-      .find(strategy => strategy.id === this.selectedStrategyId);
+      .find(item => item.id === this.selectedStrategyId);
 
     if (!strategy) {
+      console.error('Select a valid strategy.');
+      return;
+    }
+
+    if (!this.startDate || !this.endDate) {
+      console.error('Select both start and end dates.');
+      return;
+    }
+
+    if (this.startDate > this.endDate) {
+      console.error('Start date must not be after end date.');
+      return;
+    }
+
+    await this._marketHistoryService.loadCandles({
+      source: 'upstox',
+      fromDate: this.formatDate(this.startDate),
+      toDate: this.formatDate(this.endDate),
+    });
+
+    // Check the error before reading the candles.
+    if (this._marketHistoryService.error()) {
+      console.error(this._marketHistoryService.error());
       return;
     }
 
     const candles = this._marketHistoryService.getCandles();
 
-    const startTimestamp = this.startDate?.getTime();
-    const endTimestamp = this.endDate?.getTime();
+    if (candles.length === 0) {
+      console.error('No historical candles available.');
+      return;
+    }
+
+    const startTimestamp = new Date(
+      `${this.formatDate(this.startDate)}T00:00:00`,
+    ).getTime();
+
+    const endTimestamp = new Date(
+      `${this.formatDate(this.endDate)}T23:59:59.999`,
+    ).getTime();
 
     this.backtestResult = this._backtestingService.runBacktest(
       strategy,
       candles,
       this.quantity,
       this.initialCapital,
-      this.feePercent,
       this.slippagePercent,
       startTimestamp,
-      endTimestamp
+      endTimestamp,
     );
 
     this.equityChartData = {
       labels: this.backtestResult.equityCurve.map((_, index) => index),
-      datasets: [
-        {
-          label: 'Equity',
-          data: this.backtestResult.equityCurve,
-          tension: 0.2
-        }
-      ]
+      datasets: [{
+        label: 'Equity',
+        data: this.backtestResult.equityCurve,
+        tension: 0.2,
+      }],
     };
 
     this.drawdownChartData = {
       labels: this.backtestResult.drawdownCurve.map((_, index) => index),
-      datasets: [
-        {
-          label: 'Drawdown',
-          data: this.backtestResult.drawdownCurve,
-          tension: 0.2
-        }
-      ]
+      datasets: [{
+        label: 'Drawdown',
+        data: this.backtestResult.drawdownCurve,
+        tension: 0.2,
+      }],
     };
+  }
 
+
+
+  private formatDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    return `${year}-${month}-${day}`;
   }
 }

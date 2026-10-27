@@ -5,6 +5,7 @@ import { Portfolio } from './features/portfolio/portfolio';
 import { StrategyHome } from './features/strategy/strategy-home';
 import { StrategyBuilder } from './features/strategy/builder/strategy-builder/strategy-builder';
 import { BacktestHome } from './features/backtest/backtest';
+import { OrderLookup } from './features/orders/order-lookup/order-lookup';
 
 export const routes: Routes = [
     {
@@ -35,5 +36,9 @@ export const routes: Routes = [
     {
         path: 'backtest',
         component: BacktestHome
+    },
+    {
+        path: 'orders',
+        component: OrderLookup
     }
 ];

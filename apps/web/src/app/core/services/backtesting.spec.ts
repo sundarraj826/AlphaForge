@@ -564,8 +564,15 @@ describe('BacktestingService', () => {
       },
       {
         timestamp: 2,
-        open: 110,
+        open: 100,
         high: 112,
+        low: 99,
+        close: 110
+      },
+      {
+        timestamp: 3,
+        open: 110,
+        high: 111,
         low: 109,
         close: 110
       }
@@ -631,8 +638,15 @@ describe('BacktestingService', () => {
       },
       {
         timestamp: 2,
-        open: 110,
+        open: 100,
         high: 112,
+        low: 99,
+        close: 110
+      },
+      {
+        timestamp: 3,
+        open: 110,
+        high: 111,
         low: 109,
         close: 110
       }
@@ -696,8 +710,15 @@ describe('BacktestingService', () => {
       },
       {
         timestamp: 2,
-        open: 110,
+        open: 100,
         high: 112,
+        low: 99,
+        close: 110
+      },
+      {
+        timestamp: 3,
+        open: 110,
+        high: 111,
         low: 109,
         close: 110
       }
@@ -742,30 +763,37 @@ describe('BacktestingService', () => {
     const candles: MarketCandle[] = [
       {
         timestamp: 1,
-        open: 0,
-        high: 0,
-        low: 0,
+        open: 99,
+        high: 101,
+        low: 98,
         close: 100
       },
       {
         timestamp: 2,
-        open: 0,
-        high: 0,
-        low: 0,
+        open: 100,
+        high: 112,
+        low: 99,
         close: 110
       },
       {
         timestamp: 3,
-        open: 0,
-        high: 0,
-        low: 0,
+        open: 110,
+        high: 111,
+        low: 99,
         close: 100
       },
       {
         timestamp: 4,
-        open: 0,
-        high: 0,
-        low: 0,
+        open: 100,
+        high: 101,
+        low: 84,
+        close: 85
+      },
+      {
+        timestamp: 5,
+        open: 85,
+        high: 86,
+        low: 84,
         close: 85
       }
     ];
@@ -914,7 +942,7 @@ describe('BacktestingService', () => {
         timestamp: 2,
         open: 101,
         high: 105,
-        low: 103,
+        low: 101,
         close: 104
       },
       {
@@ -2053,5 +2081,55 @@ describe('BacktestingService', () => {
     expect(result.totalTrades).toBe(1);
     expect(result.trades[0].entryPrice).toBe(110);
   });
+
+
+  it('should not carry a pending BUY signal into the next trading day', () => {
+    const strategy: Strategy = {
+      id: 'pending-buy-next-day',
+      name: 'Pending BUY Next Day Strategy',
+      instrument: 'RELIANCE',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 100 },
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 115 },
+      ],
+    };
+
+    const candles: MarketCandle[] = [
+      // Day 1: generates a BUY signal.
+      {
+        timestamp: new Date('2026-10-12T10:00:00+05:30').getTime(),
+        open: 99,
+        high: 102,
+        low: 98,
+        close: 101,
+      },
+      // Day 2: must not execute the previous day's pending BUY.
+      {
+        timestamp: new Date('2026-10-13T10:00:00+05:30').getTime(),
+        open: 110,
+        high: 112,
+        low: 100,
+        close: 100,
+      },
+      // A fresh BUY signal may be generated, but entry is next candle.
+      {
+        timestamp: new Date('2026-10-13T10:15:00+05:30').getTime(),
+        open: 116,
+        high: 121,
+        low: 115,
+        close: 120,
+      },
+    ];
+
+    const result = service.runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(0);
+    expect(result.trades).toHaveLength(0);
+  });
+
 
 });

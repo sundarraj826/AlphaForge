@@ -1,55 +1,96 @@
-import { Service, signal } from '@angular/core';
+
+import { inject, Service, signal } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
+
 import { MarketCandle } from '../models/market-candle.model';
+
+type CandleSource = 'mock' | 'upstox';
+
+interface MarketCandlesApiResponse {
+    status: 'success';
+    source: CandleSource;
+    data: {
+        candles: MarketCandle[];
+    };
+}
+
+interface LoadCandlesOptions {
+    source?: CandleSource;
+    fromDate?: string;
+    toDate?: string;
+}
 
 @Service()
 export class MarketHistoryService {
-
-    private readonly _candles = signal<MarketCandle[]>([
-        {
-            timestamp: 1,
-            open: 100,
-            high: 103,
-            low: 99,
-            close: 100,
-            volume: 1000
-        },
-        {
-            timestamp: 2,
-            open: 100,
-            high: 104,
-            low: 99,
-            close: 102,
-            volume: 1200
-        },
-        {
-            timestamp: 3,
-            open: 102,
-            high: 103,
-            low: 100,
-            close: 101,
-            volume: 1100
-        },
-        {
-            timestamp: 4,
-            open: 101,
-            high: 106,
-            low: 100,
-            close: 105,
-            volume: 1500
-        },
-        {
-            timestamp: 5,
-            open: 105,
-            high: 108,
-            low: 104,
-            close: 107,
-            volume: 1600
-        }
-    ]);
+    private readonly _candles = signal<MarketCandle[]>([]);
+    private readonly _loading = signal(false);
+    private readonly _error = signal<string | null>(null);
+    private readonly _source = signal<CandleSource | null>(null);
 
     readonly candles = this._candles.asReadonly();
+    readonly loading = this._loading.asReadonly();
+    readonly error = this._error.asReadonly();
+    readonly source = this._source.asReadonly();
 
-    // This method returns the current list of market candles.
+    private readonly _http = inject(HttpClient);
+
+    async loadCandles(
+        options: LoadCandlesOptions = {},
+    ): Promise<void> {
+        const source = options.source ?? 'mock';
+
+        this._loading.set(true);
+        this._error.set(null);
+
+        try {
+            let url = 'http://localhost:3000/api/market/candles';
+
+            if (source === 'upstox') {
+                if (!options.fromDate || !options.toDate) {
+                    throw new Error(
+                        'Select both start and end dates for historical data.',
+                    );
+                }
+
+                url +=
+                    `?source=upstox` +
+                    `&fromDate=${encodeURIComponent(options.fromDate)}` +
+                    `&toDate=${encodeURIComponent(options.toDate)}`;
+            }
+
+            const response = await firstValueFrom(
+                this._http.get<MarketCandlesApiResponse>(url),
+            );
+
+            if (
+                response.status !== 'success' ||
+                response.source !== source ||
+                !Array.isArray(response.data?.candles)
+            ) {
+                throw new Error('Invalid market candles API response.');
+            }
+
+            const candles = [...response.data.candles].sort(
+                (a, b) => a.timestamp - b.timestamp,
+            );
+
+            this._candles.set(candles);
+            this._source.set(response.source);
+        } catch (error) {
+            this._candles.set([]);
+            this._source.set(null);
+
+            this._error.set(
+                error instanceof Error
+                    ? error.message
+                    : 'Unable to load market candles. Check the AlphaForge API.',
+            );
+        } finally {
+            this._loading.set(false);
+        }
+    }
+
     getCandles(): MarketCandle[] {
         return this._candles();
     }
