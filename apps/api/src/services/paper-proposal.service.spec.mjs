@@ -280,6 +280,17 @@ test('rejects an inactive strategy', () => {
     );
 });
 
+test('rejects a strategy configured with an unsupported instrument', () => {
+    assert.throws(
+        () =>
+            generate(candles, {
+                ...NIFTY50_PAPER_STRATEGY_CONFIG,
+                instrument: 'UNSUPPORTED',
+            }),
+        /server-owned NIFTY50 paper strategy configuration is invalid/,
+    );
+});
+
 test('rejects insufficient candle history', () => {
     assert.throws(
         () => generate(candles.slice(0, 49)),
