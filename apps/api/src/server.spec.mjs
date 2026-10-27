@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createApiServer, listenApiServer } from './server.mjs';
+import { OrderRiskConfigurationError } from './config/order-risk.config.mjs';
 
 const VALID_API_TOKEN = 'a'.repeat(48);
 const VALID_ORDER = {
@@ -13,9 +14,17 @@ const VALID_ORDER = {
     orderType: 'LIMIT',
     transactionType: 'BUY',
 };
+const TEST_RISK_CONFIG = {
+    allowedInstruments: [VALID_ORDER.instrumentToken],
+    maxQuantity: 5,
+    maxNotional: 500,
+};
 
 async function startServer(t, options) {
-    const server = createApiServer(options);
+    const server = createApiServer({
+        loadOrderRiskConfig: () => TEST_RISK_CONFIG,
+        ...options,
+    });
     await new Promise((resolve, reject) => {
         server.once('error', reject);
         listenApiServer(server, 0).once('listening', resolve);
@@ -29,14 +38,14 @@ async function startServer(t, options) {
     };
 }
 
-async function postOrder(baseUrl, authorization) {
+async function postOrder(baseUrl, authorization, order = VALID_ORDER) {
     return fetch(`${baseUrl}/api/orders`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
             ...(authorization ? { Authorization: authorization } : {}),
         },
-        body: JSON.stringify(VALID_ORDER),
+        body: JSON.stringify(order),
     });
 }
 
@@ -268,4 +277,170 @@ test('accepts a valid local token and submits through the mocked Sandbox provide
             orderIds: ['mock-sandbox-order-id'],
         },
     });
+});
+
+test('rejects unsupported instruments before invoking the submission provider', async (t) => {
+    let submissionCalled = false;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalled = true;
+            return {};
+        },
+    });
+
+    const response = await postOrder(baseUrl, `Bearer ${VALID_API_TOKEN}`, {
+        ...VALID_ORDER,
+        instrumentToken: 'NSE_EQ|NOT_APPROVED',
+    });
+
+    assert.equal(response.status, 422);
+    assert.equal(submissionCalled, false);
+});
+
+test('rejects quantity above the configured maximum before submission', async (t) => {
+    let submissionCalled = false;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalled = true;
+            return {};
+        },
+    });
+
+    const response = await postOrder(baseUrl, `Bearer ${VALID_API_TOKEN}`, {
+        ...VALID_ORDER,
+        quantity: TEST_RISK_CONFIG.maxQuantity + 1,
+    });
+
+    assert.equal(response.status, 422);
+    assert.equal(submissionCalled, false);
+});
+
+test('rejects notional above the configured maximum before submission', async (t) => {
+    let submissionCalled = false;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalled = true;
+            return {};
+        },
+    });
+
+    const response = await postOrder(baseUrl, `Bearer ${VALID_API_TOKEN}`, {
+        ...VALID_ORDER,
+        price: TEST_RISK_CONFIG.maxNotional + 1,
+    });
+
+    assert.equal(response.status, 422);
+    assert.equal(submissionCalled, false);
+});
+
+test('accepts exact quantity and notional limits through the mocked provider', async (t) => {
+    let receivedOrder;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async (order) => {
+            receivedOrder = order;
+            return { status: 'success', orderIds: ['mock-limit-order'] };
+        },
+    });
+
+    const boundaryOrder = {
+        ...VALID_ORDER,
+        quantity: TEST_RISK_CONFIG.maxQuantity,
+        price: TEST_RISK_CONFIG.maxNotional / TEST_RISK_CONFIG.maxQuantity,
+    };
+    const response = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        boundaryOrder,
+    );
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(receivedOrder, boundaryOrder);
+});
+
+test('uses an exact decimal notional boundary at the API boundary', async (t) => {
+    let receivedOrder;
+    const decimalRiskConfig = {
+        allowedInstruments: [VALID_ORDER.instrumentToken],
+        maxQuantity: 3,
+        maxNotional: '0.3',
+    };
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        loadOrderRiskConfig: () => decimalRiskConfig,
+        submitOrder: async (order) => {
+            receivedOrder = order;
+            return { status: 'success', orderIds: ['mock-decimal-order'] };
+        },
+    });
+
+    const boundaryOrder = {
+        ...VALID_ORDER,
+        quantity: 3,
+        price: 0.1,
+    };
+    const boundaryResponse = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        boundaryOrder,
+    );
+    assert.equal(boundaryResponse.status, 201);
+    assert.deepEqual(receivedOrder, boundaryOrder);
+
+    const aboveLimitResponse = await postOrder(
+        baseUrl,
+        `Bearer ${VALID_API_TOKEN}`,
+        { ...boundaryOrder, price: 0.100001 },
+    );
+    assert.equal(aboveLimitResponse.status, 422);
+});
+
+test('fails closed with 503 when order risk configuration is invalid', async (t) => {
+    let submissionCalled = false;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        loadOrderRiskConfig: () => {
+            throw new OrderRiskConfigurationError();
+        },
+        submitOrder: async () => {
+            submissionCalled = true;
+            return {};
+        },
+    });
+
+    const response = await postOrder(baseUrl, `Bearer ${VALID_API_TOKEN}`);
+    const body = await response.json();
+
+    assert.equal(response.status, 503);
+    assert.match(body.message, /risk limits are unavailable/);
+    assert.equal(submissionCalled, false);
+});
+
+test('returns 400 for invalid quantity or limit price before submission', async (t) => {
+    let submissionCalled = false;
+    const { baseUrl } = await startServer(t, {
+        localApiToken: VALID_API_TOKEN,
+        submitOrder: async () => {
+            submissionCalled = true;
+            return {};
+        },
+    });
+
+    for (const invalidOrder of [
+        { ...VALID_ORDER, quantity: Number.MAX_SAFE_INTEGER + 1 },
+        { ...VALID_ORDER, price: Number.POSITIVE_INFINITY },
+        { ...VALID_ORDER, price: 0 },
+    ]) {
+        const response = await postOrder(
+            baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            invalidOrder,
+        );
+        assert.equal(response.status, 400);
+    }
+
+    assert.equal(submissionCalled, false);
 });

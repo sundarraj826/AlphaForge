@@ -6,6 +6,10 @@ import { createServer as createHttpServer } from 'node:http';
 import { submitSandboxLimitOrder } from './services/upstox-order-submit.service.mjs';
 import { getSandboxOrderDetails } from './services/upstox-order.service.mjs';
 import { handleMarketCandles } from './routes/market-candles.routes.mjs';
+import {
+    loadSandboxOrderRiskConfig,
+    validateSandboxLimitOrder,
+} from './config/order-risk.config.mjs';
 
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -94,6 +98,7 @@ async function readJsonBody(request) {
 export function createApiServer({
     localApiToken = process.env.ALPHAFORGE_LOCAL_API_TOKEN,
     submitOrder = submitSandboxLimitOrder,
+    loadOrderRiskConfig = loadSandboxOrderRiskConfig,
 } = {}) {
     const configuredLocalApiToken =
         getConfiguredLocalApiToken(localApiToken);
@@ -175,8 +180,11 @@ export function createApiServer({
                 }
 
                 const order = await readJsonBody(request);
+                const riskConfig = loadOrderRiskConfig();
+                const validatedOrder =
+                    validateSandboxLimitOrder(order, riskConfig);
 
-                const result = await submitOrder(order);
+                const result = await submitOrder(validatedOrder);
 
                 return sendJson(response, 201, {
                     status: 'success',
@@ -199,9 +207,13 @@ export function createApiServer({
             return sendJson(response, statusCode, {
                 status: 'error',
                 message:
-                    statusCode === 400 || statusCode === 413
+                    statusCode === 400 ||
+                    statusCode === 413 ||
+                    statusCode === 422
                         ? error.message
-                        : 'The API request could not be completed.',
+                        : statusCode === 503
+                            ? 'Order submission risk limits are unavailable.'
+                            : 'The API request could not be completed.',
             });
         }
     });

@@ -12,6 +12,26 @@ that format, the API remains available for non-submission features, but
 This token is separate from `UPSTOX_SANDBOX_ACCESS_TOKEN`; never send it to the
 browser or include it in logs.
 
+Sandbox order submission also requires these server-side risk settings:
+
+- `UPSTOX_SANDBOX_ALLOWED_INSTRUMENTS`: comma-separated exact Upstox instrument
+  identifiers. The list must be non-empty and contain no duplicates.
+- `UPSTOX_SANDBOX_MAX_ORDER_QUANTITY`: positive safe integer.
+- `UPSTOX_SANDBOX_MAX_ORDER_NOTIONAL`: positive decimal amount in the
+  instrument's quoted currency.
+
+Missing or invalid risk settings fail closed: authenticated order requests
+receive `503` and are not submitted. Invalid order fields receive `400`;
+instruments or orders exceeding configured limits receive `422`. The maximum
+notional is checked as quantity multiplied by limit price, inclusive of the
+configured boundary. Configure these values outside source control; no
+defaults are provided.
+
+Limit prices and maximum notionals support plain decimal values with at most
+six fractional digits and fifteen integer digits. The service converts them to
+scaled integers and uses `BigInt` for exact notional comparison; values outside
+that precision or range are rejected rather than rounded.
+
 `POST /api/orders` requires `Authorization: Bearer <local-token>`. CORS remains
 restricted to the exact local Angular origin `http://localhost:4200`; CORS is
 not authentication. Its preflight response permits the `Authorization` and
