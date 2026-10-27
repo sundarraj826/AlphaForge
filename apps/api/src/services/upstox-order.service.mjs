@@ -47,9 +47,25 @@ export async function getSandboxOrderDetails(orderId, fetchImpl = fetch) {
     if (!response.ok || result?.status !== 'success') {
         const apiError = result?.errors?.[0];
 
+        console.error(
+            '[AlphaForge Sandbox Order Lookup]',
+            JSON.stringify(
+                {
+                    httpStatus: response.status,
+                    response: result,
+                },
+                null,
+                2,
+            ),
+        );
+
         throw new Error(
-            `Sandbox order-details request failed (HTTP ${response.status}): ${apiError?.errorCode ?? apiError?.error_code ?? 'UNKNOWN'
-            } - ${apiError?.message ?? 'No error details provided by Upstox.'}`,
+            `Sandbox order-details request failed (HTTP ${response.status}): ${apiError?.errorCode ??
+            apiError?.error_code ??
+            'UNKNOWN'
+            } - ${apiError?.message ??
+            'No error details provided by Upstox.'
+            }`,
         );
     }
 

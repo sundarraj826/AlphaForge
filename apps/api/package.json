@@ -3,9 +3,12 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
-  "scripts": {
+  
+"scripts": {
+  "start": "node src/server.mjs",
   "test": "node --test src/config/upstox.config.spec.mjs src/services/upstox-order.service.spec.mjs src/services/upstox-order-submit.service.spec.mjs"
 },
+
   "keywords": [],
   "author": "",
   "license": "ISC",
