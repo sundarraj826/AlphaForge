@@ -12,6 +12,14 @@ export interface BacktestResult {
     totalFees: number;
     initialCapital: number;
     finalCapital: number;
+    openPosition: {
+        side: 'LONG';
+        entryPrice: number;
+        quantity: number;
+        markPrice: number;
+        markTimestamp: number;
+        unrealizedGrossProfitLoss: number;
+    } | null;
     equityCurve: number[];
 
     drawdownCurve: number[];

@@ -303,6 +303,7 @@ describe('BacktestingService', () => {
     );
 
     expect(result.totalTrades).toBe(1);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
     expect(result.winningTrades).toBe(0);
     expect(result.losingTrades).toBe(1);
     expect(result.winRate).toBe(0);
@@ -381,6 +382,8 @@ describe('BacktestingService', () => {
 
     expect(result.equityCurve).toEqual([
       100000,
+      100000,
+      100005.915557552,
       100005.915557552,
       100006.82738245
     ]);
@@ -510,6 +513,78 @@ describe('BacktestingService', () => {
     });
   });
 
+  it('should price a gap-through stop at the candle open before slippage and fees', () => {
+    const strategy: Strategy = {
+      id: 'gap-through-stop',
+      name: 'Gap Through Stop Strategy',
+      instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '>', value: 99 }
+      ],
+      exitConditions: [],
+      riskManagement: {
+        riskPerTrade: 1,
+        stopLossPercent: 2,
+        takeProfitPercent: 5,
+        maxDailyLossPercent: 5,
+        maxOpenTrades: 1
+      }
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: 1,
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: 2,
+        open: 100,
+        high: 101,
+        low: 99,
+        close: 100
+      },
+      {
+        timestamp: 3,
+        open: 90,
+        high: 92,
+        low: 88,
+        close: 89
+      }
+    ];
+
+    const slippagePercent = 1;
+    const expectedExitPrice = 90 * (1 - slippagePercent / 100);
+    const expectedFee = service.tradingCostService.calculate(
+      ZERODHA_NSE_INTRADAY_COST_PROFILE,
+      101,
+      expectedExitPrice,
+      1,
+    );
+
+    const result = runBacktest(
+      strategy,
+      candles,
+      1,
+      100000,
+      slippagePercent,
+    );
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
+    expect(result.trades[0].entryPrice).toBe(101);
+    expect(result.trades[0].exitPrice).toBeCloseTo(expectedExitPrice);
+    expect(result.totalFees).toBeCloseTo(expectedFee);
+    expect(result.trades[0].profitLoss).toBeCloseTo(
+      (expectedExitPrice - 101) - expectedFee,
+    );
+  });
+
   it('should close a long position at take profit', () => {
 
     const strategy: Strategy = {
@@ -559,6 +634,7 @@ describe('BacktestingService', () => {
     );
 
     expect(result.totalTrades).toBe(1);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
     expect(result.winningTrades).toBe(1);
     expect(result.losingTrades).toBe(0);
     expect(result.winRate).toBe(100);
@@ -1063,7 +1139,7 @@ describe('BacktestingService', () => {
     expect(result.maxDrawdownPercent).toBeGreaterThanOrEqual(0);
   });
 
-  it('should calculate maximum drawdown from an equity decline', () => {
+  it('should calculate maximum dollar and percentage drawdowns independently', () => {
     const strategy: Strategy = {
       id: '1',
       name: 'Drawdown Strategy',
@@ -1081,40 +1157,61 @@ describe('BacktestingService', () => {
       exitConditions: [
         {
           indicator: 'Price',
-          operator: '<',
-          value: 105
+          operator: '>',
+          value: 1000
         }
       ]
     };
 
     const candles: MarketCandle[] = [
       {
-        timestamp: 1,
+        timestamp: new Date('2026-10-12T10:00:00+05:30').getTime(),
         open: 99,
         high: 101,
-        low: 98,
+        low: 99,
         close: 101
       },
       {
-        timestamp: 2,
-        open: 101,
-        high: 105,
-        low: 101,
-        close: 104
+        timestamp: new Date('2026-10-12T10:15:00+05:30').getTime(),
+        open: 10000,
+        high: 10000,
+        low: 9000,
+        close: 9000
       },
       {
-        timestamp: 3,
-        open: 104,
-        high: 107,
-        low: 103,
-        close: 106
+        timestamp: new Date('2026-10-12T10:30:00+05:30').getTime(),
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 101
       },
       {
-        timestamp: 4,
-        open: 106,
-        high: 107,
-        low: 98,
-        close: 99
+        timestamp: new Date('2026-10-12T10:45:00+05:30').getTime(),
+        open: 100,
+        high: 100,
+        low: 100,
+        close: 100
+      },
+      {
+        timestamp: new Date('2026-10-12T11:00:00+05:30').getTime(),
+        open: 100,
+        high: 900100,
+        low: 100,
+        close: 900100
+      },
+      {
+        timestamp: new Date('2026-10-12T11:15:00+05:30').getTime(),
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 101
+      },
+      {
+        timestamp: new Date('2026-10-12T11:30:00+05:30').getTime(),
+        open: 1000000,
+        high: 1000000,
+        low: 995000,
+        close: 995000
       }
     ];
 
@@ -1123,18 +1220,101 @@ describe('BacktestingService', () => {
       candles
     );
 
-    expect(result.totalTrades).toBe(2);
-    expect(result.winningTrades).toBe(1);
-    expect(result.losingTrades).toBe(1);
+    expect(result.totalTrades).toBe(3);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
 
+    let peak = result.equityCurve[0];
+    let maxDollarDrawdown = 0;
+    let maxPercentDrawdown = 0;
+    let maxDollarIndex = 0;
+    let maxPercentIndex = 0;
+
+    result.equityCurve.forEach((equity, index) => {
+      peak = Math.max(peak, equity);
+      const dollarDrawdown = peak - equity;
+      const percentDrawdown = (dollarDrawdown / peak) * 100;
+
+      if (dollarDrawdown > maxDollarDrawdown) {
+        maxDollarDrawdown = dollarDrawdown;
+        maxDollarIndex = index;
+      }
+
+      if (percentDrawdown > maxPercentDrawdown) {
+        maxPercentDrawdown = percentDrawdown;
+        maxPercentIndex = index;
+      }
+    });
+
+    expect(maxDollarIndex).not.toBe(maxPercentIndex);
+    expect(result.maxDrawdown).toBeCloseTo(maxDollarDrawdown);
+    expect(result.maxDrawdownPercent).toBeCloseTo(maxPercentDrawdown);
+  });
+
+  it('should mark every candle and capture a drawdown that recovers before exit', () => {
+    const strategy: Strategy = {
+      id: 'intratrade-drawdown',
+      name: 'Intratrade Drawdown Strategy',
+      instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [{ indicator: 'Price', operator: '>', value: 99 }],
+      exitConditions: [{ indicator: 'Price', operator: '>', value: 105 }],
+    };
+    const candles: MarketCandle[] = [
+      {
+        timestamp: new Date('2026-10-12T10:00:00+05:30').getTime(),
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100,
+      },
+      {
+        timestamp: new Date('2026-10-12T10:15:00+05:30').getTime(),
+        open: 100,
+        high: 101,
+        low: 99,
+        close: 100,
+      },
+      {
+        timestamp: new Date('2026-10-12T10:30:00+05:30').getTime(),
+        open: 100,
+        high: 102,
+        low: 90,
+        close: 95,
+      },
+      {
+        timestamp: new Date('2026-10-12T10:45:00+05:30').getTime(),
+        open: 95,
+        high: 110,
+        low: 95,
+        close: 106,
+      },
+    ];
+    const fee = service.tradingCostService.calculate(
+      ZERODHA_NSE_INTRADAY_COST_PROFILE,
+      100,
+      106,
+      1,
+    );
+
+    const result = runBacktest(strategy, candles);
+
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
     expect(result.equityCurve).toEqual([
       100000,
-      100002.91673177,
-      99995.83331354,
+      100000,
+      100000,
+      99995,
+      100006 - fee,
     ]);
-
-    expect(result.maxDrawdown).toBe(7.08341823000228);
-    expect(result.maxDrawdownPercent).toBeCloseTo(0.007);
+    expect(result.maxDrawdown).toBe(5);
+    expect(result.maxDrawdownPercent).toBeCloseTo(0.005);
+    expect(result.totalTrades).toBe(1);
+    expect(result.totalProfitLoss).toBeCloseTo(6 - fee);
+    expect(result.equityCurve.at(-1)).toBeCloseTo(
+      result.initialCapital + result.totalProfitLoss,
+    );
   });
 
   it('should calculate position quantity based on risk', () => {
@@ -1268,6 +1448,7 @@ describe('BacktestingService', () => {
 
     expect(result.totalTrades).toBe(0);
     expect(result.trades).toHaveLength(0);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
   });
 
   it('should reduce position quantity when stop loss is farther away', () => {
@@ -1542,6 +1723,7 @@ describe('BacktestingService', () => {
     );
 
     expect(result.totalTrades).toBe(1);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
   });
 
 
@@ -1684,6 +1866,7 @@ describe('BacktestingService', () => {
 
     expect(result.totalTrades).toBe(1);
     expect(result.trades).toHaveLength(1);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
     expect(result.trades[0].entryPrice).toBe(100);
     expect(result.trades[0].exitPrice).toBe(103);
     expect(result.totalFees).toBeGreaterThan(0);
@@ -1706,7 +1889,7 @@ describe('BacktestingService', () => {
   });
 
 
-  it('should not count an open position as completed when data ends before EOD', () => {
+  it('should mark an open position to the final candle close without counting it as completed', () => {
     const strategy: Strategy = {
       id: 'incomplete-session',
       name: 'Incomplete Session Strategy',
@@ -1754,6 +1937,67 @@ describe('BacktestingService', () => {
 
     expect(result.totalTrades).toBe(0);
     expect(result.trades).toHaveLength(0);
+    expect(result.totalProfitLoss).toBe(0);
+    expect(result.openPosition).toEqual({
+      side: 'LONG',
+      entryPrice: 100,
+      quantity: 1,
+      markPrice: 102,
+      markTimestamp: candles[1].timestamp,
+      unrealizedGrossProfitLoss: 2,
+    });
+    expect(result.finalCapital).toBe(100002);
+    expect(result.equityCurve).toEqual([100000, 100000, 100002]);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
+    expect(result.maxDrawdown).toBe(0);
+  });
+
+  it('includes an open position loss in final equity and drawdown without recording an exit', () => {
+    const strategy: Strategy = {
+      id: 'open-position-loss',
+      name: 'Open Position Loss Strategy',
+      instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [{ indicator: 'Price', operator: '>', value: 99 }],
+      exitConditions: [{ indicator: 'Price', operator: '>', value: 110 }],
+    };
+    const candles: MarketCandle[] = [
+      {
+        timestamp: new Date('2026-10-12T14:30:00+05:30').getTime(),
+        open: 99,
+        high: 101,
+        low: 99,
+        close: 100,
+      },
+      {
+        timestamp: new Date('2026-10-12T14:45:00+05:30').getTime(),
+        open: 100,
+        high: 101,
+        low: 94,
+        close: 95,
+      },
+    ];
+
+    const result = runBacktest(strategy, candles);
+
+    expect(result.totalTrades).toBe(0);
+    expect(result.trades).toHaveLength(0);
+    expect(result.totalProfitLoss).toBe(0);
+    expect(result.openPosition).toEqual({
+      side: 'LONG',
+      entryPrice: 100,
+      quantity: 1,
+      markPrice: 95,
+      markTimestamp: candles[1].timestamp,
+      unrealizedGrossProfitLoss: -5,
+    });
+    expect(result.finalCapital).toBe(99995);
+    expect(result.equityCurve).toEqual([100000, 100000, 99995]);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
+    expect(result.maxDrawdown).toBe(5);
+    expect(result.maxDrawdownPercent).toBeCloseTo(0.005);
   });
 
 
@@ -1811,6 +2055,61 @@ describe('BacktestingService', () => {
     expect(result.trades).toHaveLength(1);
     expect(result.trades[0].exitPrice).toBe(103);
     expect(result.totalFees).toBeGreaterThan(0);
+  });
+
+  it('should fill a strategy-generated SELL at the signal candle close less slippage', () => {
+    const strategy: Strategy = {
+      id: 'same-close-sell-test',
+      name: 'Same Close SELL Strategy',
+      instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
+      timeframe: '15m',
+      status: 'Active',
+      entryConditions: [
+        { indicator: 'Price', operator: '<', value: 100 }
+      ],
+      exitConditions: [
+        { indicator: 'Price', operator: '>', value: 105 }
+      ]
+    };
+
+    const candles: MarketCandle[] = [
+      {
+        timestamp: new Date('2026-10-12T10:00:00+05:30').getTime(),
+        open: 98,
+        high: 100,
+        low: 97,
+        close: 99
+      },
+      {
+        timestamp: new Date('2026-10-12T10:15:00+05:30').getTime(),
+        open: 100,
+        high: 103,
+        low: 99,
+        close: 102
+      },
+      {
+        timestamp: new Date('2026-10-12T10:30:00+05:30').getTime(),
+        open: 102,
+        high: 107,
+        low: 101,
+        close: 106
+      },
+      {
+        timestamp: new Date('2026-10-12T10:45:00+05:30').getTime(),
+        open: 150,
+        high: 152,
+        low: 148,
+        close: 151
+      }
+    ];
+
+    const result = runBacktest(strategy, candles, 1, 100000, 1);
+
+    expect(result.totalTrades).toBe(1);
+    expect(result.trades).toHaveLength(1);
+    expect(result.trades[0].exitPrice).toBeCloseTo(104.94, 8);
+    expect(result.trades[0].exitPrice).not.toBe(candles[3].open);
   });
 
 
@@ -2208,6 +2507,7 @@ describe('BacktestingService', () => {
     expect(
       result.trades.some(trade => trade.entryPrice === 100)
     ).toBe(false);
+    expect(result.equityCurve).toHaveLength(candles.length + 1);
   });
 
 

@@ -89,6 +89,15 @@
 
     @if (backtestResult) {
     <div class="backtest-summary">
+        @if (backtestResult.openPosition; as position) {
+        <p class="data-source">
+            Open {{ position.side }} position (not closed). Entry: {{ position.entryPrice | number:'1.2-2' }},
+            quantity: {{ position.quantity }}, marked at final candle close: {{ position.markPrice | number:'1.2-2' }}.
+            Unrealized gross P&amp;L: {{ position.unrealizedGrossProfitLoss | number:'1.2-2' }}.
+            No exit fees or slippage are included because no exit was simulated.
+        </p>
+        }
+
         <mat-card>
             <mat-card-content>
                 <div class="summary-label">Initial Capital</div>
@@ -154,7 +163,7 @@
 
         <mat-card>
             <mat-card-content>
-                <div class="summary-label">Final Capital</div>
+                <div class="summary-label">Final Equity</div>
                 <div class="summary-value">
                     {{ backtestResult.finalCapital | number:'1.2-2' }}
                 </div>
@@ -163,7 +172,7 @@
 
         <mat-card>
             <mat-card-content>
-                <div class="summary-label">Total P&L</div>
+                <div class="summary-label">Realized P&L</div>
                 <div class="summary-value">
                     {{ backtestResult.totalProfitLoss | number:'1.2-2'}}
                 </div>

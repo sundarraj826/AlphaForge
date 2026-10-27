@@ -149,11 +149,20 @@ export class BacktestingService {
         const equityCurve: number[] = [initialCapital];
         const drawdownCurve: number[] = [];
 
-        let peakEquity = initialCapital;
         let maxDrawdown = 0;
         let maxDrawdownPercent = 0;
 
         const trades: BacktestTrade[] = [];
+        const recordMarkedEquity = (markPrice: number): void => {
+            const unrealizedGrossProfitLoss =
+                positionSide === 'LONG'
+                    ? (markPrice - entryPrice) * quantity
+                    : 0;
+
+            equityCurve.push(
+                initialCapital + totalProfitLoss + unrealizedGrossProfitLoss,
+            );
+        };
 
         for (let i = 0; i < filteredCandles.length; i++) {
 
@@ -197,6 +206,7 @@ export class BacktestingService {
                 maxDailyLoss > 0 &&
                 dailyLoss >= maxDailyLoss
             ) {
+                recordMarkedEquity(candle.close);
                 continue;
             }
 
@@ -227,6 +237,7 @@ export class BacktestingService {
 
                 if (quantity <= 0) {
                     entryPrice = 0;
+                    recordMarkedEquity(candle.close);
                     continue;
                 }
 
@@ -240,6 +251,7 @@ export class BacktestingService {
                 // Continue into the existing position-management logic.
             } else if (positionSide === 'NONE' && signal === 'BUY') {
                 pendingBuy = true;
+                recordMarkedEquity(candle.close);
                 continue;
             }
 
@@ -257,8 +269,14 @@ export class BacktestingService {
                     stopLossPrice !== null &&
                     candle.low <= stopLossPrice
                 ) {
-                    const slippage = stopLossPrice * (slippagePercent / 100);
-                    const exitPrice = stopLossPrice - slippage;
+                    const stopLossExecutionPrice = Math.min(
+                        candle.open,
+                        stopLossPrice,
+                    );
+                    const slippage =
+                        stopLossExecutionPrice * (slippagePercent / 100);
+                    const exitPrice =
+                        stopLossExecutionPrice - slippage;
 
                     const grossProfitLoss =
                         (exitPrice - entryPrice) * quantity;
@@ -290,7 +308,6 @@ export class BacktestingService {
                     totalProfitLoss += profitLoss;
                     dailyProfitLoss += profitLoss;
                     finalCapital = initialCapital + totalProfitLoss;
-                    equityCurve.push(finalCapital);
 
                     if (profitLoss > 0) {
                         winningTrades++;
@@ -308,6 +325,7 @@ export class BacktestingService {
                     positionSide = 'NONE';
                     entryPrice = 0;
 
+                    recordMarkedEquity(candle.close);
                     continue;
                 }
 
@@ -359,8 +377,6 @@ export class BacktestingService {
                     dailyProfitLoss += profitLoss;
                     finalCapital = initialCapital + totalProfitLoss;
 
-                    equityCurve.push(finalCapital);
-
                     if (profitLoss > 0) {
                         winningTrades++;
                     } else {
@@ -377,6 +393,7 @@ export class BacktestingService {
                     positionSide = 'NONE';
                     entryPrice = 0;
 
+                    recordMarkedEquity(candle.close);
                     continue;
                 }
 
@@ -384,6 +401,7 @@ export class BacktestingService {
                     const slippage =
                         candle.close * (slippagePercent / 100);
 
+                    // Assumed same-close fill for a close-generated SELL; real-world fills are not guaranteed.
                     const exitPrice =
                         candle.close - slippage;
 
@@ -417,8 +435,6 @@ export class BacktestingService {
                     dailyProfitLoss += profitLoss;
                     finalCapital = initialCapital + totalProfitLoss;
 
-                    equityCurve.push(finalCapital);
-
                     if (profitLoss > 0) {
                         winningTrades++;
                     } else {
@@ -436,6 +452,9 @@ export class BacktestingService {
                     entryPrice = 0;
                 }
             }
+
+            // Close marks capture close-to-close drawdown, not intrabar extremes.
+            recordMarkedEquity(candle.close);
         }
 
         const winRate =
@@ -466,33 +485,44 @@ export class BacktestingService {
                     ? Infinity
                     : 0;
 
-        finalCapital = initialCapital + totalProfitLoss;
+        let openPosition: BacktestResult['openPosition'] = null;
 
+        if (positionSide === 'LONG' && filteredCandles.length > 0) {
+            const finalCandle = filteredCandles[filteredCandles.length - 1];
+
+            const unrealizedGrossProfitLoss =
+                (finalCandle.close - entryPrice) * quantity;
+            openPosition = {
+                side: positionSide,
+                entryPrice,
+                quantity,
+                markPrice: finalCandle.close,
+                markTimestamp: finalCandle.timestamp,
+                unrealizedGrossProfitLoss,
+            };
+        }
+
+        finalCapital = equityCurve[equityCurve.length - 1];
+
+        let peakEquity = initialCapital;
         for (const equity of equityCurve) {
             if (equity > peakEquity) {
                 peakEquity = equity;
             }
 
             const drawdown = peakEquity - equity;
+            const drawdownPercent =
+                peakEquity > 0 ? (drawdown / peakEquity) * 100 : 0;
 
             if (drawdown > maxDrawdown) {
                 maxDrawdown = drawdown;
-
-                maxDrawdownPercent =
-                    peakEquity > 0
-                        ? (drawdown / peakEquity) * 100
-                        : 0;
-            }
-        }
-
-        let peak = initialCapital;
-
-        for (const equity of equityCurve) {
-            if (equity > peak) {
-                peak = equity;
             }
 
-            drawdownCurve.push(peak - equity);
+            if (drawdownPercent > maxDrawdownPercent) {
+                maxDrawdownPercent = drawdownPercent;
+            }
+
+            drawdownCurve.push(drawdown);
         }
 
         return {
@@ -507,6 +537,7 @@ export class BacktestingService {
             totalFees,
             initialCapital,
             finalCapital,
+            openPosition,
             equityCurve,
             drawdownCurve,
             maxDrawdown,

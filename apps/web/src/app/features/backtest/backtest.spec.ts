@@ -49,6 +49,7 @@ describe('Backtest', () => {
     totalFees: 0,
     initialCapital: 100000,
     finalCapital: 100000,
+    openPosition: null,
     equityCurve: [100000],
     drawdownCurve: [0],
     maxDrawdown: 0,
