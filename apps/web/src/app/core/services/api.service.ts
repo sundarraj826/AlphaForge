@@ -22,4 +22,8 @@ export class ApiService {
     getOrderDetails(orderId: string): Observable<unknown> {
         return this._http.get<unknown>(`${this._baseUrl}/orders/${encodeURIComponent(orderId.trim())}`)
     }
+
+    getPaperProposals(): Observable<unknown> {
+        return this._http.get<unknown>('/api/paper-proposals')
+    }
 }
