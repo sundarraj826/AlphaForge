@@ -684,6 +684,100 @@ test('serializes concurrent duplicate requests through the durable claim', async
     assert.equal(submissionCalls, 1);
 });
 
+test('prevents duplicate submissions across independent API and SQLite instances', async (t) => {
+    const temporaryDirectory = mkdtempSync(
+        path.join(tmpdir(), 'alphaforge-independent-api-test-'),
+    );
+    const databasePath = path.join(
+        temporaryDirectory,
+        'order-intents.sqlite',
+    );
+    const firstStore = createOrderIntentStore({ databasePath });
+    const secondStore = createOrderIntentStore({ databasePath });
+    let providerCalls = 0;
+    let releaseFirstProviderCall;
+    let signalProviderStarted;
+    const providerStarted = new Promise(resolve => {
+        signalProviderStarted = resolve;
+    });
+    const firstProviderCall = new Promise(resolve => {
+        releaseFirstProviderCall = resolve;
+    });
+    const submitOrder = async () => {
+        providerCalls++;
+        if (providerCalls === 1) {
+            signalProviderStarted();
+            await firstProviderCall;
+        }
+        return {
+            status: 'success',
+            orderIds: ['mock-independent-store-order'],
+        };
+    };
+    let firstServer;
+    let secondServer;
+
+    try {
+        firstServer = await startServer(t, {
+            orderIntentStore: firstStore,
+            localApiToken: VALID_API_TOKEN,
+            submitOrder,
+        });
+        secondServer = await startServer(t, {
+            orderIntentStore: secondStore,
+            localApiToken: VALID_API_TOKEN,
+            submitOrder,
+        });
+
+        const firstRequest = postOrder(
+            firstServer.baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            VALID_IDEMPOTENCY_KEY,
+        );
+        const secondRequest = postOrder(
+            secondServer.baseUrl,
+            `Bearer ${VALID_API_TOKEN}`,
+            VALID_ORDER,
+            VALID_IDEMPOTENCY_KEY,
+        );
+
+        await providerStarted;
+        let firstResponse;
+        let secondResponse;
+        try {
+            const firstCompletedResponse = await Promise.race([
+                firstRequest,
+                secondRequest,
+            ]);
+            assert.equal(firstCompletedResponse.status, 202);
+            assert.equal(
+                (await firstCompletedResponse.json()).state,
+                'SUBMITTING',
+            );
+        } finally {
+            releaseFirstProviderCall();
+        }
+
+        [firstResponse, secondResponse] = await Promise.all([
+            firstRequest,
+            secondRequest,
+        ]);
+        assert.deepEqual(
+            [firstResponse.status, secondResponse.status].sort(),
+            [201, 202],
+        );
+        assert.equal(providerCalls, 1);
+    } finally {
+        releaseFirstProviderCall();
+        await secondServer?.shutdown();
+        await firstServer?.shutdown();
+        firstStore.close();
+        secondStore.close();
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+});
+
 test('does not resubmit an order after an ambiguous provider failure', async (t) => {
     let submissionCalls = 0;
     const { baseUrl } = await startServer(t, {

@@ -100,6 +100,55 @@ test('rejects a key already claimed for a different order fingerprint', () => {
     }
 });
 
+test('allows only one concurrent claim across independent store connections', async () => {
+    const temporaryDirectory = createTemporaryDirectory();
+    const databasePath = path.join(
+        temporaryDirectory,
+        'order-intents.sqlite',
+    );
+    const firstStore = createOrderIntentStore({ databasePath });
+    const secondStore = createOrderIntentStore({ databasePath });
+
+    try {
+        const claims = await Promise.all([
+            Promise.resolve().then(() =>
+                firstStore.claim(KEY_HASH, FINGERPRINT, ORDER),
+            ),
+            Promise.resolve().then(() =>
+                secondStore.claim(KEY_HASH, FINGERPRINT, ORDER),
+            ),
+        ]);
+
+        assert.equal(
+            claims.filter(claim => claim.created).length,
+            1,
+        );
+        assert.equal(
+            claims.filter(
+                claim =>
+                    !claim.created &&
+                    claim.intent.state === 'SUBMITTING',
+            ).length,
+            1,
+        );
+        const database = new Database(databasePath, { readonly: true });
+        try {
+            assert.equal(
+                database
+                    .prepare('SELECT COUNT(*) AS count FROM order_intents')
+                    .get().count,
+                1,
+            );
+        } finally {
+            database.close();
+        }
+    } finally {
+        firstStore.close();
+        secondStore.close();
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+});
+
 test('transitions only stale SUBMITTING records to UNKNOWN after reopening', () => {
     const temporaryDirectory = createTemporaryDirectory();
     const databasePath = path.join(
