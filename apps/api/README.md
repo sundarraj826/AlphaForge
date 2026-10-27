@@ -90,3 +90,10 @@ with a reference close, but deliberately marks orderable instrument, quantity,
 limit price, and order risk check unavailable. It does not submit orders or
 call broker APIs. Candle delay and freshness settings are heuristic and require
 provider/session confirmation before actionable use.
+
+Paper-proposal persistence is separate from order intents. Configure
+`ALPHAFORGE_PAPER_PROPOSALS_DB_PATH` as an absolute SQLite path outside the
+repository before creating a paper-proposal store. The database records
+validated paper proposal payloads and deduplicates by strategy ID/version,
+instrument, signal, and candle timestamp. It does not submit orders or call
+broker APIs.
