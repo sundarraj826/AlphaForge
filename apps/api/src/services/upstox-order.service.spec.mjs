@@ -11,6 +11,14 @@ function mockResponse(body, status = 200) {
     };
 }
 
+function mockSandboxConfig() {
+    return {
+        mode: 'sandbox',
+        baseUrl: 'https://api-sandbox.upstox.com',
+        accessToken: 'test-sandbox-token',
+    };
+}
+
 test('retrieves order details through the Sandbox host', async () => {
     let requestedUrl;
     let requestedOptions;
@@ -33,6 +41,7 @@ test('retrieves order details through the Sandbox host', async () => {
     const order = await getSandboxOrderDetails(
         'sandbox-test-123',
         mockFetch,
+        mockSandboxConfig,
     );
 
     assert.equal(order.order_id, 'sandbox-test-123');
@@ -76,7 +85,7 @@ test('reports an order-not-found response', async () => {
         );
 
     await assert.rejects(
-        getSandboxOrderDetails('missing-order', mockFetch),
+        getSandboxOrderDetails('missing-order', mockFetch, mockSandboxConfig),
         /HTTP 404.*UDAPI100010.*Order not found/,
     );
 });
@@ -89,7 +98,11 @@ test('rejects a response for a different order ID', async () => {
         });
 
     await assert.rejects(
-        getSandboxOrderDetails('requested-order', mockFetch),
+        getSandboxOrderDetails(
+            'requested-order',
+            mockFetch,
+            mockSandboxConfig,
+        ),
         /did not match the requested order ID/,
     );
 });
@@ -100,7 +113,11 @@ test('propagates network and timeout errors', async () => {
     };
 
     await assert.rejects(
-        getSandboxOrderDetails('sandbox-test-123', mockFetch),
+        getSandboxOrderDetails(
+            'sandbox-test-123',
+            mockFetch,
+            mockSandboxConfig,
+        ),
         /Simulated network timeout/,
     );
 });
@@ -115,7 +132,11 @@ test('rejects invalid JSON responses', async () => {
     });
 
     await assert.rejects(
-        getSandboxOrderDetails('sandbox-test-123', mockFetch),
+        getSandboxOrderDetails(
+            'sandbox-test-123',
+            mockFetch,
+            mockSandboxConfig,
+        ),
         /invalid JSON/,
     );
 });

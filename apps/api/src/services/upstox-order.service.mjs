@@ -3,7 +3,11 @@ import { getUpstoxSandboxConfig } from '../config/upstox.config.mjs';
 
 const SANDBOX_BASE_URL = 'https://api-sandbox.upstox.com';
 
-export async function getSandboxOrderDetails(orderId, fetchImpl = fetch) {
+export async function getSandboxOrderDetails(
+    orderId,
+    fetchImpl = fetch,
+    getConfig = getUpstoxSandboxConfig,
+) {
     if (typeof orderId !== 'string' || !orderId.trim()) {
         throw new Error('A valid Sandbox order ID is required.');
     }
@@ -12,13 +16,17 @@ export async function getSandboxOrderDetails(orderId, fetchImpl = fetch) {
         throw new Error('A valid HTTP request function is required.');
     }
 
-    const config = getUpstoxSandboxConfig();
+    const config = getConfig();
 
     if (
         config.mode !== 'sandbox' ||
-        config.baseUrl !== SANDBOX_BASE_URL
+        config.baseUrl !== SANDBOX_BASE_URL ||
+        typeof config.accessToken !== 'string' ||
+        !config.accessToken.trim()
     ) {
-        throw new Error('Safety check failed: Sandbox mode is required.');
+        throw new Error(
+            'Safety check failed: valid Sandbox configuration is required.',
+        );
     }
 
     const requestedOrderId = orderId.trim();
