@@ -54,6 +54,7 @@ describe('BacktestingService', () => {
     expect(result.losingTrades).toBe(0);
     expect(result.winRate).toBe(0);
     expect(result.totalProfitLoss).toBe(0);
+    expect(result.profitFactor).toBe(0);
   });
 
   it('should execute a trade and calculate profit', () => {
@@ -107,6 +108,7 @@ describe('BacktestingService', () => {
     expect(result.winningTrades).toBe(1);
     expect(result.losingTrades).toBe(0);
     expect(result.winRate).toBe(100);
+    expect(result.profitFactor).toBe(Infinity);
     expect(result.totalProfitLoss).toBeCloseTo(11.831115104, 8);
 
     expect(result.trades).toHaveLength(1);
@@ -802,7 +804,9 @@ describe('BacktestingService', () => {
 
     expect(result.grossProfit).toBe(10);
     expect(result.grossLoss).toBe(15);
-    expect(result.profitFactor).toBeCloseTo(10 / 15);
+    expect(result.profitFactor).toBeCloseTo(
+      9.91480474 / 15.07541011
+    );
   });
 
   it('should filter candles by start and end timestamp', () => {

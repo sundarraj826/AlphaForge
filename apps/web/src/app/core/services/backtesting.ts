@@ -427,10 +427,26 @@ export class BacktestingService {
                 ? (winningTrades / totalTrades) * 100
                 : 0;
 
+        const netGains = trades.reduce(
+            (total, trade) =>
+                trade.profitLoss > 0
+                    ? total + trade.profitLoss
+                    : total,
+            0
+        );
+
+        const netLosses = trades.reduce(
+            (total, trade) =>
+                trade.profitLoss < 0
+                    ? total + Math.abs(trade.profitLoss)
+                    : total,
+            0
+        );
+
         const profitFactor =
-            grossLoss > 0
-                ? grossProfit / grossLoss
-                : grossProfit > 0
+            netLosses > 0
+                ? netGains / netLosses
+                : netGains > 0
                     ? Infinity
                     : 0;
 
