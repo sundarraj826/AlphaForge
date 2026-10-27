@@ -149,7 +149,8 @@ export class BacktestHome {
     const candles = this._marketHistoryService.getCandles();
 
     if (candles.length === 0) {
-      console.error('No historical candles available.');
+      this.validationMessage =
+        'No historical candles were found for the selected instrument, timeframe, and date range. Please check your selection.';
       return;
     }
 

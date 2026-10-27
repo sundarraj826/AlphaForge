@@ -135,6 +135,22 @@ describe('Backtest', () => {
     expect(backtestingService.runBacktest).not.toHaveBeenCalled();
   });
 
+  it('displays feedback when no historical candles are returned', async () => {
+    marketHistoryService.getCandles.mockReturnValue([]);
+
+    fixture.detectChanges();
+    fixture.nativeElement.querySelector('button[mat-raised-button]').click();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    expect(component.validationMessage).toBe(
+      'No historical candles were found for the selected instrument, timeframe, and date range. Please check your selection.',
+    );
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent)
+      .toContain('No historical candles were found');
+    expect(backtestingService.runBacktest).not.toHaveBeenCalled();
+  });
+
   it.each(['FOREX', 'CRYPTO', 'INDIAN_EQUITY_DELIVERY'] as const)(
     'rejects a selected %s strategy before loading historical data',
     async market => {
