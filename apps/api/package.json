@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "node src/server.mjs",
-    "test": "node --test src/config/upstox.config.spec.mjs src/config/order-risk.config.spec.mjs src/config/order-intent.config.spec.mjs src/server.spec.mjs src/routes/market-candles.routes.spec.mjs src/services/candle-eligibility.spec.mjs src/services/market-candle-mapper.spec.mjs src/services/market-candle-provider.spec.mjs src/services/upstox-historical-candle-provider.spec.mjs src/services/upstox-order.service.spec.mjs src/services/upstox-order-submit.service.spec.mjs src/storage/order-intent.store.spec.mjs"
+    "test": "node --test src/config/upstox.config.spec.mjs src/config/order-risk.config.spec.mjs src/config/order-intent.config.spec.mjs src/server.spec.mjs src/routes/market-candles.routes.spec.mjs src/services/candle-eligibility.spec.mjs src/services/paper-proposal.service.spec.mjs src/services/market-candle-mapper.spec.mjs src/services/market-candle-provider.spec.mjs src/services/upstox-historical-candle-provider.spec.mjs src/services/upstox-order.service.spec.mjs src/services/upstox-order-submit.service.spec.mjs src/storage/order-intent.store.spec.mjs"
   },
   "keywords": [],
   "author": "",

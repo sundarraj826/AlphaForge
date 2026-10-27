@@ -83,3 +83,10 @@ heuristic only; it does not prove that Upstox has finalized a candle or will
 not revise it. Confirm the provider's finality semantics, timeframe alignment,
 exchange timezone, session schedule, holiday calendar, and delivery delay before
 using this helper to generate actionable proposals.
+
+The NIFTY50 paper proposal core evaluates only the server-owned versioned
+strategy configuration and injected candles. It can produce a paper BUY signal
+with a reference close, but deliberately marks orderable instrument, quantity,
+limit price, and order risk check unavailable. It does not submit orders or
+call broker APIs. Candle delay and freshness settings are heuristic and require
+provider/session confirmation before actionable use.
