@@ -1,5 +1,6 @@
 
 import 'dotenv/config';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { createServer as createHttpServer } from 'node:http';
 
 import { submitSandboxLimitOrder } from './services/upstox-order-submit.service.mjs';
@@ -8,9 +9,30 @@ import { handleMarketCandles } from './routes/market-candles.routes.mjs';
 
 
 const PORT = Number(process.env.PORT) || 3000;
+const API_HOST = '127.0.0.1';
 const MAX_BODY_SIZE = 1024 * 1024;
+const LOCAL_API_TOKEN_PATTERN = /^[A-Za-z0-9_-]{32,}$/;
 
 const ALLOWED_ORIGIN = 'http://localhost:4200';
+
+function getConfiguredLocalApiToken(token) {
+    return typeof token === 'string' && LOCAL_API_TOKEN_PATTERN.test(token)
+        ? token
+        : null;
+}
+
+function hasValidBearerToken(authorization, expectedToken) {
+    const match = /^Bearer ([A-Za-z0-9_-]+)$/.exec(authorization ?? '');
+
+    if (!match) {
+        return false;
+    }
+
+    const providedDigest = createHash('sha256').update(match[1]).digest();
+    const expectedDigest = createHash('sha256').update(expectedToken).digest();
+
+    return timingSafeEqual(providedDigest, expectedDigest);
+}
 
 function setCorsHeaders(request, response) {
     const origin = request.headers.origin;
@@ -30,7 +52,7 @@ function setCorsHeaders(request, response) {
         );
         response.setHeader(
             'Access-Control-Allow-Headers',
-            'Content-Type',
+            'Content-Type, Authorization',
         );
     }
 }
@@ -69,7 +91,13 @@ async function readJsonBody(request) {
     }
 }
 
-export function createApiServer() {
+export function createApiServer({
+    localApiToken = process.env.ALPHAFORGE_LOCAL_API_TOKEN,
+    submitOrder = submitSandboxLimitOrder,
+} = {}) {
+    const configuredLocalApiToken =
+        getConfiguredLocalApiToken(localApiToken);
+
     return createHttpServer(async (request, response) => {
         setCorsHeaders(request, response);
 
@@ -116,6 +144,7 @@ export function createApiServer() {
                 request.method === 'GET' &&
                 url.pathname.startsWith('/api/orders/')
             ) {
+                // Read-only lookup stays unauthenticated for the local UI; the server binds to loopback only.
                 const orderId = decodeURIComponent(
                     url.pathname.slice('/api/orders/'.length),
                 );
@@ -132,9 +161,22 @@ export function createApiServer() {
                 request.method === 'POST' &&
                 url.pathname === '/api/orders'
             ) {
+                if (
+                    !configuredLocalApiToken ||
+                    !hasValidBearerToken(
+                        request.headers.authorization,
+                        configuredLocalApiToken,
+                    )
+                ) {
+                    return sendJson(response, 401, {
+                        status: 'error',
+                        message: 'Valid local API credentials are required.',
+                    });
+                }
+
                 const order = await readJsonBody(request);
 
-                const result = await submitSandboxLimitOrder(order);
+                const result = await submitOrder(order);
 
                 return sendJson(response, 201, {
                     status: 'success',
@@ -165,6 +207,10 @@ export function createApiServer() {
     });
 }
 
+export function listenApiServer(server, port = PORT) {
+    return server.listen(port, API_HOST);
+}
+
 const isMainModule =
     process.argv[1] &&
     import.meta.url === new URL(
@@ -174,8 +220,8 @@ const isMainModule =
 if (isMainModule) {
     const server = createApiServer();
 
-    server.listen(PORT, () => {
-        console.log(`AlphaForge API listening on port ${PORT}`);
+    listenApiServer(server).on('listening', () => {
+        console.log(`AlphaForge API listening on 127.0.0.1:${PORT}`);
         console.log('Trading mode: Upstox Sandbox only');
     });
 }

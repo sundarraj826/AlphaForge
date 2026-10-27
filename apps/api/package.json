@@ -6,7 +6,7 @@
   
 "scripts": {
   "start": "node src/server.mjs",
-  "test": "node --test src/config/upstox.config.spec.mjs src/services/upstox-order.service.spec.mjs src/services/upstox-order-submit.service.spec.mjs"
+  "test": "node --test src/config/upstox.config.spec.mjs src/server.spec.mjs src/services/upstox-order.service.spec.mjs src/services/upstox-order-submit.service.spec.mjs"
 },
 
   "keywords": [],
