@@ -97,3 +97,8 @@ repository before creating a paper-proposal store. The database records
 validated paper proposal payloads and deduplicates by strategy ID/version,
 instrument, signal, and candle timestamp. It does not submit orders or call
 broker APIs.
+
+`GET /api/paper-proposals` returns persisted proposals and requires the local
+Bearer token. It supports keyset pagination with an optional `limit` from 1 to
+100 (default 20) and an opaque `cursor` returned as `nextCursor`. Responses
+disable caching and never include the configured database path.

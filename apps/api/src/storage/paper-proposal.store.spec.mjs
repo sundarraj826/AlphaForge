@@ -7,6 +7,7 @@ import Database from 'better-sqlite3';
 
 import {
     createPaperProposalStore,
+    PaperProposalQueryError,
     PaperProposalStoreError,
 } from './paper-proposal.store.mjs';
 
@@ -36,6 +37,13 @@ function createTemporaryDirectory() {
 
 function databasePathFor(directory) {
     return path.join(directory, 'paper-proposals.sqlite');
+}
+
+function proposalFor(index) {
+    return {
+        ...PROPOSAL,
+        signalTimestamp: PROPOSAL.signalTimestamp + index,
+    };
 }
 
 test('persists validated proposal data across separate store connections', () => {
@@ -264,6 +272,102 @@ test('persists additional JSON-safe proposal fields without restricting them', (
         const inserted = store.insert(proposal);
         assert.equal(inserted.created, true);
         assert.deepEqual(inserted.proposal.payload, proposal);
+    } finally {
+        store.close();
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+});
+
+test('lists proposals in stable descending order and continues with an opaque cursor', () => {
+    const temporaryDirectory = createTemporaryDirectory();
+    const store = createPaperProposalStore({
+        databasePath: databasePathFor(temporaryDirectory),
+        now: (() => {
+            const values = [10, 20, 20, 30, 20];
+            return () => values.shift();
+        })(),
+    });
+
+    try {
+        const inserted = [
+            store.insert(proposalFor(1)).proposal,
+            store.insert(proposalFor(2)).proposal,
+            store.insert(proposalFor(3)).proposal,
+            store.insert(proposalFor(4)).proposal,
+            store.insert(proposalFor(5)).proposal,
+        ];
+        const firstPage = store.list({ limit: 2 });
+        const tiedRows = inserted
+            .filter(proposal => proposal.createdAt === 20)
+            .sort((left, right) =>
+                left.proposalId < right.proposalId
+                    ? 1
+                    : left.proposalId > right.proposalId
+                        ? -1
+                        : 0,
+            );
+
+        assert.deepEqual(
+            firstPage.proposals.map(proposal => proposal.proposalId),
+            [inserted[3].proposalId, tiedRows[0].proposalId],
+        );
+        assert.equal(typeof firstPage.nextCursor, 'string');
+        assert.match(firstPage.nextCursor, /^[A-Za-z0-9_-]+$/);
+
+        const secondPage = store.list({
+            limit: 2,
+            cursor: firstPage.nextCursor,
+        });
+        assert.deepEqual(
+            secondPage.proposals.map(proposal => proposal.proposalId),
+            [tiedRows[1].proposalId, tiedRows[2].proposalId],
+        );
+        assert.equal(typeof secondPage.nextCursor, 'string');
+
+        const thirdPage = store.list({
+            limit: 2,
+            cursor: secondPage.nextCursor,
+        });
+        assert.deepEqual(
+            thirdPage.proposals.map(proposal => proposal.proposalId),
+            [inserted[0].proposalId],
+        );
+        assert.equal(thirdPage.nextCursor, null);
+    } finally {
+        store.close();
+        rmSync(temporaryDirectory, { recursive: true, force: true });
+    }
+});
+
+test('returns an empty proposal page and rejects invalid pagination inputs', () => {
+    const temporaryDirectory = createTemporaryDirectory();
+    const store = createPaperProposalStore({
+        databasePath: databasePathFor(temporaryDirectory),
+    });
+
+    try {
+        assert.deepEqual(store.list(), {
+            proposals: [],
+            nextCursor: null,
+        });
+        for (const options of [
+            { limit: 0 },
+            { limit: 101 },
+            { limit: 1.5 },
+            { limit: '2' },
+            { cursor: 'not-a-valid-cursor!' },
+            { cursor: Buffer.from(JSON.stringify({
+                createdAt: 1,
+                proposalId: 'a'.repeat(64),
+                extra: true,
+            })).toString('base64url') },
+            null,
+        ]) {
+            assert.throws(
+                () => store.list(options),
+                PaperProposalQueryError,
+            );
+        }
     } finally {
         store.close();
         rmSync(temporaryDirectory, { recursive: true, force: true });

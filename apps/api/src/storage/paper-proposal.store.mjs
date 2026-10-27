@@ -14,6 +14,17 @@ export class PaperProposalStoreError extends Error {
     }
 }
 
+export class PaperProposalQueryError extends Error {
+    constructor() {
+        super('Invalid paper-proposal pagination query.');
+        this.statusCode = 400;
+    }
+}
+
+const DEFAULT_PAGE_SIZE = 20;
+const MAX_PAGE_SIZE = 100;
+const PROPOSAL_ID_PATTERN = /^[a-f0-9]{64}$/;
+
 function invalidProposal() {
     throw new PaperProposalStoreError();
 }
@@ -190,6 +201,57 @@ function deserializeProposal(row) {
     }
 }
 
+function decodeCursor(cursor) {
+    if (
+        typeof cursor !== 'string' ||
+        cursor.length === 0 ||
+        cursor.length > 256 ||
+        !/^[A-Za-z0-9_-]+$/.test(cursor)
+    ) {
+        throw new PaperProposalQueryError();
+    }
+
+    try {
+        const decoded = Buffer.from(cursor, 'base64url').toString('utf8');
+        const value = JSON.parse(decoded);
+        if (
+            !value ||
+            typeof value !== 'object' ||
+            Object.keys(value).length !== 2 ||
+            !Object.hasOwn(value, 'createdAt') ||
+            !Object.hasOwn(value, 'proposalId') ||
+            !Number.isSafeInteger(value.createdAt) ||
+            value.createdAt < 0 ||
+            typeof value.proposalId !== 'string' ||
+            !PROPOSAL_ID_PATTERN.test(value.proposalId) ||
+            Buffer.from(JSON.stringify(value), 'utf8').toString('base64url') !==
+                cursor
+        ) {
+            throw new PaperProposalQueryError();
+        }
+
+        return {
+            createdAt: value.createdAt,
+            proposalId: value.proposalId,
+        };
+    } catch (error) {
+        if (error instanceof PaperProposalQueryError) {
+            throw error;
+        }
+        throw new PaperProposalQueryError();
+    }
+}
+
+function encodeCursor(row) {
+    return Buffer.from(
+        JSON.stringify({
+            createdAt: row.created_at,
+            proposalId: row.proposal_id,
+        }),
+        'utf8',
+    ).toString('base64url');
+}
+
 export class PaperProposalStore {
     constructor({ databasePath, now = Date.now }) {
         if (typeof now !== 'function') {
@@ -259,6 +321,14 @@ export class PaperProposalStore {
                 AND signal = ?
                 AND candle_timestamp = ?
         `);
+        this.listProposals = database.prepare(`
+            SELECT * FROM paper_proposals
+            WHERE (? IS NULL OR created_at < ? OR (
+                created_at = ? AND proposal_id < ?
+            ))
+            ORDER BY created_at DESC, proposal_id DESC
+            LIMIT ?
+        `);
         this.insertTransaction = database.transaction(identity => {
             const createdAt = this.now();
             if (!Number.isSafeInteger(createdAt) || createdAt < 0) {
@@ -303,6 +373,50 @@ export class PaperProposalStore {
             if (error instanceof PaperProposalStoreError) {
                 throw error;
             }
+            throw new PaperProposalStoreError();
+        }
+    }
+
+    list(options = {}) {
+        if (
+            !options ||
+            typeof options !== 'object' ||
+            Array.isArray(options)
+        ) {
+            throw new PaperProposalQueryError();
+        }
+
+        const { limit = DEFAULT_PAGE_SIZE, cursor } = options;
+        if (
+            !Number.isSafeInteger(limit) ||
+            limit < 1 ||
+            limit > MAX_PAGE_SIZE
+        ) {
+            throw new PaperProposalQueryError();
+        }
+
+        const decodedCursor =
+            cursor === undefined || cursor === null
+                ? null
+                : decodeCursor(cursor);
+
+        try {
+            const rows = this.listProposals.all(
+                decodedCursor?.createdAt ?? null,
+                decodedCursor?.createdAt ?? null,
+                decodedCursor?.createdAt ?? null,
+                decodedCursor?.proposalId ?? null,
+                limit + 1,
+            );
+            const hasMore = rows.length > limit;
+            const pageRows = hasMore ? rows.slice(0, limit) : rows;
+            return {
+                proposals: pageRows.map(deserializeProposal),
+                nextCursor: hasMore
+                    ? encodeCursor(pageRows[pageRows.length - 1])
+                    : null,
+            };
+        } catch {
             throw new PaperProposalStoreError();
         }
     }

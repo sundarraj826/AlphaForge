@@ -9,6 +9,7 @@ import {
 } from './services/upstox-order-submit.service.mjs';
 import { getSandboxOrderDetails } from './services/upstox-order.service.mjs';
 import { handleMarketCandles } from './routes/market-candles.routes.mjs';
+import { handlePaperProposals } from './routes/paper-proposals.routes.mjs';
 import {
     loadSandboxOrderRiskConfig,
     validateSandboxLimitOrder,
@@ -18,6 +19,10 @@ import {
     createOrderIntentStore,
     OrderIntentStoreError,
 } from './storage/order-intent.store.mjs';
+import { loadPaperProposalDatabasePath } from './config/paper-proposal.config.mjs';
+import {
+    createPaperProposalStore,
+} from './storage/paper-proposal.store.mjs';
 
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -113,11 +118,18 @@ export function createApiServer({
         createOrderIntentStore({
             databasePath: loadOrderIntentDatabasePath(),
         }),
+    paperProposalStore: injectedPaperProposalStore,
+    paperProposalStoreFactory = () =>
+        createPaperProposalStore({
+            databasePath: loadPaperProposalDatabasePath(),
+        }),
 } = {}) {
     const configuredLocalApiToken =
         getConfiguredLocalApiToken(localApiToken);
     let orderIntentStore = injectedOrderIntentStore;
     let orderIntentStoreInitializationError;
+    let paperProposalStore = injectedPaperProposalStore;
+    let paperProposalStoreInitializationError = false;
 
     if (!orderIntentStore) {
         try {
@@ -144,6 +156,23 @@ export function createApiServer({
         }
 
         return orderIntentStore;
+    }
+
+    function getPaperProposalStore() {
+        if (paperProposalStoreInitializationError) {
+            throw new Error('Paper-proposal storage is unavailable.');
+        }
+
+        if (!paperProposalStore) {
+            try {
+                paperProposalStore = paperProposalStoreFactory();
+            } catch {
+                paperProposalStoreInitializationError = true;
+                throw new Error('Paper-proposal storage is unavailable.');
+            }
+        }
+
+        return paperProposalStore;
     }
 
     return createHttpServer(async (request, response) => {
@@ -186,6 +215,28 @@ export function createApiServer({
                 url.pathname === '/api/market/candles'
             ) {
                 return handleMarketCandles(request, response);
+            }
+
+            if (
+                request.method === 'GET' &&
+                url.pathname === '/api/paper-proposals'
+            ) {
+                if (
+                    !configuredLocalApiToken ||
+                    !hasValidBearerToken(
+                        request.headers.authorization,
+                        configuredLocalApiToken,
+                    )
+                ) {
+                    return sendJson(response, 401, {
+                        status: 'error',
+                        message: 'Valid local API credentials are required.',
+                    });
+                }
+
+                return handlePaperProposals(request, response, {
+                    getStore: getPaperProposalStore,
+                });
             }
 
             if (
