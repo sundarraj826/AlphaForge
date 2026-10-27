@@ -18,6 +18,7 @@ export class StrategyService {
             id: '1',
             name: 'Gold EMA Cross',
             instrument: 'XAU/USD',
+            market: 'FOREX',
             timeframe: '15m',
             status: 'Active',
             entryConditions: [
@@ -40,6 +41,7 @@ export class StrategyService {
             id: '2',
             name: 'BTC Breakout',
             instrument: 'BTC/USD',
+            market: 'CRYPTO',
             timeframe: '1H',
             status: 'Inactive'
         },
@@ -47,6 +49,7 @@ export class StrategyService {
             id: '3',
             name: 'NIFTY Intraday Trend',
             instrument: 'NIFTY50',
+            market: 'INDIAN_EQUITY_INTRADAY',
             timeframe: '15m',
             status: 'Active',
             type: 'INTRADAY',

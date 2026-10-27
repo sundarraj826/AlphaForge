@@ -2,8 +2,10 @@ import { TestBed } from '@angular/core/testing';
 
 import { BacktestingService } from './backtesting';
 import { StrategyService } from './strategy';
+import { ZERODHA_NSE_INTRADAY_COST_PROFILE } from './trading-cost';
 import { MarketCandle } from '../models/market-candle.model';
 import { Strategy } from '../models/strategy.model';
+import { TradingCostConfig, TradingMarket } from '../models/trading-cost.model';
 
 describe('BacktestingService', () => {
 
@@ -21,8 +23,138 @@ describe('BacktestingService', () => {
     service = TestBed.inject(BacktestingService);
   });
 
+  const runBacktest = (
+    strategy: Strategy,
+    candles: MarketCandle[],
+    quantity: number = 1,
+    initialCapital: number = 100000,
+    slippagePercent: number = 0,
+    startTimestamp?: number,
+    endTimestamp?: number,
+    riskPercent: number = 0,
+    tradingCostConfig: TradingCostConfig = ZERODHA_NSE_INTRADAY_COST_PROFILE
+  ) => service['runBacktest'](
+    strategy,
+    candles,
+    quantity,
+    initialCapital,
+    slippagePercent,
+    startTimestamp,
+    endTimestamp,
+    riskPercent,
+    tradingCostConfig
+  );
+
   it('should be created', () => {
     expect(service).toBeTruthy();
+  });
+
+  it('should require an explicit trading cost configuration', () => {
+    expect(() => service['runBacktest'](
+      {
+        id: '1',
+        name: 'Test Strategy',
+        instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
+        timeframe: '15m',
+        status: 'Active'
+      },
+      []
+    )).toThrowError('A trading cost configuration is required to run a backtest.');
+  });
+
+  it('should reject a strategy with missing or invalid market classification', () => {
+    const strategy: Strategy = {
+      id: 'unclassified',
+      name: 'Unclassified Strategy',
+      instrument: 'TEST',
+      market: 'INDIAN_EQUITY_INTRADAY',
+      timeframe: '15m',
+      status: 'Active'
+    };
+    const missingMarket = { ...strategy };
+    delete (missingMarket as Partial<Strategy>).market;
+
+    expect(() => runBacktest(missingMarket, []))
+      .toThrowError(
+        'A valid strategy market classification is required to run a backtest.',
+      );
+
+    expect(() => runBacktest(
+      { ...strategy, market: 'NOT_A_MARKET' as TradingMarket },
+      []
+    )).toThrowError(
+      'A valid strategy market classification is required to run a backtest.',
+    );
+  });
+
+  it('should reject Forex strategies until a validated Forex cost model is designed', () => {
+    expect(() => runBacktest(
+      {
+        id: 'forex',
+        name: 'Forex Strategy',
+        instrument: 'XAU/USD',
+        market: 'FOREX',
+        timeframe: '15m',
+        status: 'Active'
+      },
+      []
+    )).toThrowError(
+      'FOREX backtests are unsupported until a validated Forex cost model is designed.',
+    );
+  });
+
+  it('should reject a trading-cost profile that does not match the strategy market', () => {
+    const strategy: Strategy = {
+      id: 'delivery',
+      name: 'Delivery Strategy',
+      instrument: 'TEST',
+      market: 'INDIAN_EQUITY_DELIVERY',
+      timeframe: '15m',
+      status: 'Active'
+    };
+
+    expect(() => runBacktest(
+      strategy,
+      [],
+      1,
+      100000,
+      0,
+      undefined,
+      undefined,
+      0,
+      ZERODHA_NSE_INTRADAY_COST_PROFILE
+    )).toThrowError(
+      'Trading cost market "INDIAN_EQUITY_INTRADAY" does not match strategy market "INDIAN_EQUITY_DELIVERY".',
+    );
+  });
+
+  it('should reject incomplete named Indian intraday profiles', () => {
+    const incompleteProfile: TradingCostConfig = {
+      ...ZERODHA_NSE_INTRADAY_COST_PROFILE,
+      sttPercent: undefined
+    };
+
+    expect(() => runBacktest(
+      {
+        id: 'intraday',
+        name: 'Intraday Strategy',
+        instrument: 'TEST',
+        market: 'INDIAN_EQUITY_INTRADAY',
+        timeframe: '15m',
+        status: 'Active'
+      },
+      [],
+      1,
+      100000,
+      0,
+      undefined,
+      undefined,
+      0,
+      incompleteProfile
+    )).toThrowError(
+      'The ZERODHA_NSE_INTRADAY cost profile is incomplete. Missing: sttPercent.',
+    );
   });
 
   it('should return zero trades when no candles are provided', () => {
@@ -31,6 +163,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Test Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -44,7 +177,7 @@ describe('BacktestingService', () => {
 
     const candles: MarketCandle[] = [];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles
     );
@@ -63,6 +196,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Test Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -98,7 +232,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       2
@@ -127,6 +261,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Test Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -162,7 +297,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles
     );
@@ -183,6 +318,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Test Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -232,7 +368,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles
     );
@@ -272,6 +408,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Test Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -300,7 +437,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles
     );
@@ -318,6 +455,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Stop Loss Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -354,7 +492,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles
     );
@@ -378,6 +516,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Take Profit Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -414,7 +553,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles
     );
@@ -439,6 +578,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'EMA Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -509,7 +649,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles
     );
@@ -531,6 +671,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Fee Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -580,7 +721,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -605,6 +746,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Slippage Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -654,7 +796,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -677,6 +819,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Gross Profit Strategy',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -726,7 +869,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -744,6 +887,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Profit Factor Test',
       instrument: 'XAU/USD',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -800,7 +944,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.grossProfit).toBe(10);
     expect(result.grossLoss).toBe(15);
@@ -811,7 +955,11 @@ describe('BacktestingService', () => {
 
   it('should filter candles by start and end timestamp', () => {
     const strategyService = TestBed.inject(StrategyService);
-    const strategy = strategyService.strategies()[0];
+    const strategy = {
+      ...strategyService.strategies()[0],
+      instrument: 'NIFTY50',
+      market: 'INDIAN_EQUITY_INTRADAY' as const
+    };
 
     const candles = [
       {
@@ -851,7 +999,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -867,7 +1015,11 @@ describe('BacktestingService', () => {
 
   it('should calculate maximum drawdown', () => {
     const strategyService = TestBed.inject(StrategyService);
-    const strategy = strategyService.strategies()[0];
+    const strategy = {
+      ...strategyService.strategies()[0],
+      instrument: 'NIFTY50',
+      market: 'INDIAN_EQUITY_INTRADAY' as const
+    };
 
     const candles: MarketCandle[] = [
       {
@@ -900,7 +1052,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -915,7 +1067,8 @@ describe('BacktestingService', () => {
     const strategy: Strategy = {
       id: '1',
       name: 'Drawdown Strategy',
-      instrument: 'XAU/USD',
+      instrument: 'NIFTY50',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -965,7 +1118,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles
     );
@@ -989,6 +1142,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Risk Based Position Sizing Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
 
@@ -1034,7 +1188,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -1055,6 +1209,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Zero Quantity Risk Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
 
@@ -1100,7 +1255,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -1120,6 +1275,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Far Stop Loss Risk Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
 
@@ -1165,7 +1321,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -1187,6 +1343,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Capital Based Risk Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
 
@@ -1246,7 +1403,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -1269,6 +1426,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Capital Limit Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1303,7 +1461,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -1323,6 +1481,7 @@ describe('BacktestingService', () => {
       id: '1',
       name: 'Daily Loss Limit Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1371,7 +1530,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -1391,6 +1550,7 @@ describe('BacktestingService', () => {
       id: 'daily-reset',
       name: 'Daily Loss Reset Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1449,7 +1609,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -1472,6 +1632,7 @@ describe('BacktestingService', () => {
       id: 'eod-test',
       name: 'EOD Exit Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1514,7 +1675,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       1,
@@ -1550,6 +1711,7 @@ describe('BacktestingService', () => {
       id: 'incomplete-session',
       name: 'Incomplete Session Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1588,7 +1750,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.totalTrades).toBe(0);
     expect(result.trades).toHaveLength(0);
@@ -1600,6 +1762,7 @@ describe('BacktestingService', () => {
       id: 'eod-sell-test',
       name: 'EOD SELL Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1642,7 +1805,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.totalTrades).toBe(1);
     expect(result.trades).toHaveLength(1);
@@ -1656,6 +1819,7 @@ describe('BacktestingService', () => {
       id: 'eod-stop-loss',
       name: 'EOD Stop Loss Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1692,7 +1856,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.totalTrades).toBe(1);
     expect(result.trades).toHaveLength(1);
@@ -1707,6 +1871,7 @@ describe('BacktestingService', () => {
       id: 'eod-take-profit',
       name: 'EOD Take Profit Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1743,7 +1908,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.totalTrades).toBe(1);
     expect(result.trades).toHaveLength(1);
@@ -1758,6 +1923,7 @@ describe('BacktestingService', () => {
       id: 'same-candle-sl-tp',
       name: 'Same Candle SL TP Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1794,7 +1960,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.totalTrades).toBe(1);
     expect(result.trades).toHaveLength(1);
@@ -1809,6 +1975,7 @@ describe('BacktestingService', () => {
       id: 'accounting-consistency',
       name: 'Accounting Consistency Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1843,7 +2010,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.totalTrades).toBe(1);
 
@@ -1867,6 +2034,7 @@ describe('BacktestingService', () => {
       id: 'daily-loss-open-position',
       name: 'Daily Loss Open Position Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1901,7 +2069,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.totalTrades).toBe(1);
     expect(result.trades).toHaveLength(1);
@@ -1915,6 +2083,7 @@ describe('BacktestingService', () => {
       id: 'daily-loss-reset',
       name: 'Daily Loss Reset Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -1975,7 +2144,7 @@ describe('BacktestingService', () => {
       }
     ];
 
-    const result = service.runBacktest(
+    const result = runBacktest(
       strategy,
       candles,
       100,
@@ -1994,6 +2163,7 @@ describe('BacktestingService', () => {
       id: 'next-candle-entry',
       name: 'Next Candle Entry Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -2033,7 +2203,7 @@ describe('BacktestingService', () => {
       },
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(
       result.trades.some(trade => trade.entryPrice === 100)
@@ -2046,6 +2216,7 @@ describe('BacktestingService', () => {
       id: 'next-candle-entry',
       name: 'Next Candle Entry Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -2080,7 +2251,7 @@ describe('BacktestingService', () => {
       },
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.totalTrades).toBe(1);
     expect(result.trades[0].entryPrice).toBe(110);
@@ -2092,6 +2263,7 @@ describe('BacktestingService', () => {
       id: 'pending-buy-next-day',
       name: 'Pending BUY Next Day Strategy',
       instrument: 'RELIANCE',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -2129,7 +2301,7 @@ describe('BacktestingService', () => {
       },
     ];
 
-    const result = service.runBacktest(strategy, candles);
+    const result = runBacktest(strategy, candles);
 
     expect(result.totalTrades).toBe(0);
     expect(result.trades).toHaveLength(0);

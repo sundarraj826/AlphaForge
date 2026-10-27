@@ -37,6 +37,7 @@ describe('PaperTradingSimulationService', () => {
       id: 'test-strategy',
       name: 'Test Strategy',
       instrument: 'TEST',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '1m',
       status: 'Active',
       entryConditions: [
@@ -94,6 +95,7 @@ describe('PaperTradingSimulationService', () => {
       id: 'sell-test-strategy',
       name: 'Sell Test Strategy',
       instrument: 'TEST',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '1m',
       status: 'Active',
       entryConditions: [
@@ -156,6 +158,7 @@ describe('PaperTradingSimulationService', () => {
       id: 'losing-trade-strategy',
       name: 'Losing Trade Strategy',
       instrument: 'TEST',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '1m',
       status: 'Active',
       entryConditions: [

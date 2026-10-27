@@ -7,7 +7,10 @@ import { BacktestTrade } from '../models/backtest-trade.model';
 
 import { StrategyService } from './strategy';
 import { TradingCostService } from './trading-cost';
-import { TradingCostConfig } from '../models/trading-cost.model';
+import {
+    TradingCostConfig,
+    TRADING_MARKETS
+} from '../models/trading-cost.model';
 import { PositionSizingService } from './position-sizing';
 import { TradingSessionService } from './trading-session';
 
@@ -27,8 +30,35 @@ export class BacktestingService {
         slippagePercent: number = 0,
         startTimestamp?: number,
         endTimestamp?: number,
-        riskPercent: number = 0
+        riskPercent: number = 0,
+        tradingCostConfig?: TradingCostConfig
     ): BacktestResult {
+
+        if (!strategy || !TRADING_MARKETS.includes(strategy.market)) {
+            throw new Error(
+                'A valid strategy market classification is required to run a backtest.',
+            );
+        }
+
+        if (strategy.market === 'FOREX') {
+            throw new Error(
+                'FOREX backtests are unsupported until a validated Forex cost model is designed.',
+            );
+        }
+
+        if (!tradingCostConfig) {
+            throw new Error(
+                'A trading cost configuration is required to run a backtest.',
+            );
+        }
+
+        if (tradingCostConfig.market !== strategy.market) {
+            throw new Error(
+                `Trading cost market "${tradingCostConfig.market}" does not match strategy market "${strategy.market}".`,
+            );
+        }
+
+        this.tradingCostService.validateBacktestConfig(tradingCostConfig);
 
         if (!Array.isArray(candles)) {
             throw new Error('Candles must be an array.');
@@ -100,20 +130,6 @@ export class BacktestingService {
                 return candle;
             })
             .sort((a, b) => a.timestamp - b.timestamp);
-
-        const tradingCostConfig: TradingCostConfig = {
-            market: 'INDIAN_EQUITY_INTRADAY',
-            exchange: 'NSE',
-            broker: 'ZERODHA',
-            brokeragePercent: 0.03,
-            brokerageFixed: 20,
-            sttPercent: 0.025,
-            exchangeTransactionPercent: 0.00307,
-            sebiChargesPercent: 0.0001,
-            stampDutyPercent: 0.003,
-            gstPercent: 18
-        };
-
 
         let positionSide: 'LONG' | 'NONE' = 'NONE';
         let entryPrice = 0;

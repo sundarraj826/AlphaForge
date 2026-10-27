@@ -12,6 +12,10 @@ import { OPERATORS } from '../../../../core/constants/operators';
 
 
 import { Strategy } from '../../../../core/models/strategy.model';
+import {
+  TRADING_MARKETS,
+  TradingMarket
+} from '../../../../core/models/trading-cost.model';
 import { Indicator, Operator } from '../../../../core/types/trading-rule.types';
 
 @Component({
@@ -24,6 +28,7 @@ export class StrategyBuilder {
 
   private readonly _fb = inject(FormBuilder);
   readonly instruments = INSTRUMENTS;
+  readonly markets = TRADING_MARKETS;
   readonly timeframes = TIMEFRAMES;
   readonly indicators = INDICATORS;
   readonly operators = OPERATORS;
@@ -33,6 +38,7 @@ export class StrategyBuilder {
   readonly strategyForm = this._fb.nonNullable.group({
     name: ['', Validators.required],
     instrument: ['', Validators.required],
+    market: ['', Validators.required],
     timeframe: ['', Validators.required],
     status: [true],
 
@@ -107,6 +113,7 @@ export class StrategyBuilder {
       id: '',
       name: formValue.name,
       instrument: formValue.instrument,
+      market: formValue.market as TradingMarket,
       timeframe: formValue.timeframe,
       status: formValue.status ? 'Active' : 'Inactive',
 

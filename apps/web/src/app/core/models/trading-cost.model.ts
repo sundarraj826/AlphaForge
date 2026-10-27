@@ -2,7 +2,18 @@ export type TradingMarket =
     | 'INDIAN_EQUITY_INTRADAY'
     | 'INDIAN_EQUITY_DELIVERY'
     | 'INDIAN_FNO'
-    | 'FOREX';
+    | 'FOREX'
+    | 'CRYPTO';
+
+export const TRADING_MARKETS: readonly TradingMarket[] = [
+    'INDIAN_EQUITY_INTRADAY',
+    'INDIAN_EQUITY_DELIVERY',
+    'INDIAN_FNO',
+    'FOREX',
+    'CRYPTO'
+];
+
+export type TradingCostProfileId = 'ZERODHA_NSE_INTRADAY';
 
 export type TradingExchange =
     | 'NSE'
@@ -15,6 +26,7 @@ export type TradingBroker =
 
 export interface TradingCostConfig {
     market: TradingMarket;
+    profileId?: TradingCostProfileId;
     exchange?: TradingExchange;
     broker?: TradingBroker;
 

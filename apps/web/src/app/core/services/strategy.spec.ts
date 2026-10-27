@@ -41,6 +41,7 @@ describe('StrategyService', () => {
     id: 'intraday-test',
     name: 'NIFTY Intraday Trend',
     instrument: 'NIFTY50',
+      market: 'INDIAN_EQUITY_INTRADAY',
     timeframe: '15m',
     status: 'Active',
     type: 'INTRADAY',
@@ -294,6 +295,7 @@ describe('StrategyService', () => {
       id: '1',
       name: 'Test Strategy',
       instrument: 'XAU/USD',
+      market: 'FOREX',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -337,6 +339,7 @@ describe('StrategyService', () => {
       id: '1',
       name: 'Test Strategy',
       instrument: 'XAU/USD',
+      market: 'FOREX',
       timeframe: '15m',
       status: 'Active',
       entryConditions: [
@@ -377,6 +380,7 @@ describe('StrategyService', () => {
       id: '1',
       name: 'Test Strategy',
       instrument: 'XAU/USD',
+      market: 'FOREX',
       timeframe: '15m',
       status: 'Active'
     };
@@ -529,6 +533,7 @@ describe('StrategyService', () => {
       id: '1',
       name: 'Test Strategy',
       instrument: 'XAU/USD',
+      market: 'FOREX',
       timeframe: '15m',
       status: 'Active',
       exitConditions: [
@@ -778,6 +783,7 @@ describe('StrategyService', () => {
       id: 'intraday-test',
       name: 'NIFTY Intraday Trend',
       instrument: 'NIFTY50',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       type: 'INTRADAY'
@@ -800,6 +806,7 @@ describe('StrategyService', () => {
       id: 'intraday-test',
       name: 'NIFTY Intraday Trend',
       instrument: 'NIFTY50',
+      market: 'INDIAN_EQUITY_INTRADAY',
       timeframe: '15m',
       status: 'Active',
       type: 'INTRADAY'

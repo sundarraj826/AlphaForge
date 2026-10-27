@@ -67,6 +67,12 @@
         {{ _marketHistoryService.loading() ? 'Loading candles...' : 'Run Backtest' }}
     </button>
 
+    @if (validationMessage; as message) {
+    <p class="error-message" role="alert">
+        {{ message }}
+    </p>
+    }
+
     @if (_marketHistoryService.source(); as source) {
     <p class="data-source">
         Data source: {{ source === 'upstox' ? 'Upstox Historical' : 'Mock Data' }}

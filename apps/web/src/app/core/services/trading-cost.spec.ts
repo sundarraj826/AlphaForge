@@ -160,4 +160,68 @@ describe('TradingCostService', () => {
     expect(result).toBeCloseTo(86.05526, 4);
   });
 
+  it('should reject Forex costs until a validated Forex model is available', () => {
+    const config: TradingCostConfig = {
+      market: 'FOREX',
+      brokeragePercent: 0.03,
+      brokerageFixed: 20
+    };
+
+    expect(() => service.calculate(config, 100, 110, 10))
+      .toThrowError(
+        'FOREX costs are unsupported until fee semantics and broker-approved configuration are designed; no Forex charges have been applied.',
+      );
+  });
+
+  it('should never apply Indian statutory charges to Forex', () => {
+    const config: TradingCostConfig = {
+      market: 'FOREX',
+      brokeragePercent: 0.03,
+      brokerageFixed: 20,
+      sttPercent: 0.025
+    };
+
+    expect(() => service.calculate(config, 100, 110, 10))
+      .toThrowError(
+        'FOREX costs are unsupported until fee semantics and broker-approved configuration are designed; no Forex charges have been applied.',
+      );
+  });
+
+  it.each(['spreadPercent', 'commissionPercent', 'swapPercent'] as const)(
+    'should reject Forex %s until its calculation basis is defined',
+    field => {
+      const config: TradingCostConfig = {
+        market: 'FOREX',
+        [field]: 0.1
+      };
+
+      expect(() => service.calculate(config, 100, 110, 10))
+        .toThrowError(
+          'FOREX costs are unsupported until fee semantics and broker-approved configuration are designed; no Forex charges have been applied.',
+        );
+    }
+  );
+
+  it('should reject an empty Forex cost configuration', () => {
+    expect(() => service.calculate({ market: 'FOREX' }, 100, 110, 10))
+      .toThrowError(
+        'FOREX costs are unsupported until fee semantics and broker-approved configuration are designed; no Forex charges have been applied.',
+      );
+  });
+
+  it('should reject invalid rates and unsupported market types', () => {
+    expect(() => service.calculate({
+      market: 'INDIAN_EQUITY_INTRADAY',
+      brokeragePercent: -0.01
+    }, 100, 110, 10)).toThrowError(
+      'Trading cost rates must be finite and non-negative.',
+    );
+
+    expect(() => service.calculate({
+      market: 'INDIAN_EQUITY_DELIVERY'
+    }, 100, 110, 10)).toThrowError(
+      'Trading cost market "INDIAN_EQUITY_DELIVERY" is not supported.',
+    );
+  });
+
 });

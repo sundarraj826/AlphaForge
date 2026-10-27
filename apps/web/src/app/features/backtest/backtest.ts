@@ -18,6 +18,7 @@ import { StrategyService } from '../../core/services/strategy';
 import { MarketHistoryService } from '../../core/services/market-history';
 
 import { BacktestResult } from '../../core/models/backtest-result.model';
+import { ZERODHA_NSE_INTRADAY_COST_PROFILE } from '../../core/services/trading-cost';
 
 @Component({
   selector: 'app-backtest',
@@ -43,6 +44,7 @@ export class BacktestHome {
   readonly _marketHistoryService = inject(MarketHistoryService);
 
   backtestResult: BacktestResult | null = null;
+  validationMessage: string | null = null;
   equityChartData: ChartData<'line'> = {
     labels: [],
     datasets: [
@@ -95,6 +97,7 @@ export class BacktestHome {
   async runBacktest(): Promise<void> {
     // Clear previous results so stale data is not mistaken for a new run.
     this.backtestResult = null;
+    this.validationMessage = null;
     this.equityChartData = {
       labels: [],
       datasets: [{ label: 'Equity', data: [], tension: 0.2 }],
@@ -110,6 +113,12 @@ export class BacktestHome {
 
     if (!strategy) {
       console.error('Select a valid strategy.');
+      return;
+    }
+
+    if (strategy.market !== 'INDIAN_EQUITY_INTRADAY') {
+      this.validationMessage =
+        'Backtesting is currently available only for Indian intraday strategies. Forex and other markets are disabled until validated cost models are available.';
       return;
     }
 
@@ -158,6 +167,8 @@ export class BacktestHome {
       this.slippagePercent,
       startTimestamp,
       endTimestamp,
+      0,
+      ZERODHA_NSE_INTRADAY_COST_PROFILE,
     );
 
     this.equityChartData = {
