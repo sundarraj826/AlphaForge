@@ -18,6 +18,7 @@ interface MarketCandlesApiResponse {
 interface LoadCandlesOptions {
     source?: CandleSource;
     instrument?: string;
+    timeframe?: string;
     fromDate?: string;
     toDate?: string;
 }
@@ -48,15 +49,21 @@ export class MarketHistoryService {
             let url = 'http://localhost:3000/api/market/candles';
 
             if (source === 'upstox') {
-                if (!options.instrument || !options.fromDate || !options.toDate) {
+                if (
+                    !options.instrument ||
+                    !options.timeframe ||
+                    !options.fromDate ||
+                    !options.toDate
+                ) {
                     throw new Error(
-                        'Select a supported instrument and both start and end dates for historical data.',
+                        'Select a supported instrument, timeframe, and both start and end dates for historical data.',
                     );
                 }
 
                 url +=
                     `?source=upstox` +
                     `&instrument=${encodeURIComponent(options.instrument)}` +
+                    `&timeframe=${encodeURIComponent(options.timeframe)}` +
                     `&fromDate=${encodeURIComponent(options.fromDate)}` +
                     `&toDate=${encodeURIComponent(options.toDate)}`;
             }

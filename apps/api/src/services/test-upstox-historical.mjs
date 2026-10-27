@@ -10,6 +10,7 @@ const provider = new UpstoxHistoricalCandleProvider();
 try {
     const candles = await provider.getHistoricalCandles({
         instrumentKey: 'NSE_INDEX|Nifty 50',
+        unit: 'minutes',
         interval: 5,
         fromDate: '2026-10-26',
         toDate: '2026-10-26',

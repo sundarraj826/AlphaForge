@@ -1,5 +1,6 @@
 
 import { mapHistoricalCandleResponse } from './market-candle-mapper.mjs';
+import { UPSTOX_HISTORICAL_TIMEFRAMES } from '../config/upstox-timeframes.mjs';
 
 const BASE_URL = 'https://api.upstox.com/v3';
 
@@ -7,7 +8,8 @@ export class UpstoxHistoricalCandleProvider {
 
     async getHistoricalCandles({
         instrumentKey,
-        interval = 5,
+        unit,
+        interval,
         fromDate,
         toDate,
     }) {
@@ -44,9 +46,19 @@ export class UpstoxHistoricalCandleProvider {
             throw new Error('Invalid historical candle date range.');
         }
 
-        // 3. Validate interval.
-        if (interval !== 5) {
-            throw new Error('Only five-minute candles are supported.');
+        // 3. Validate the explicit Upstox V3 candle interval.
+        const supportedInterval = Object.values(
+            UPSTOX_HISTORICAL_TIMEFRAMES,
+        ).some(
+            timeframe =>
+                timeframe.unit === unit &&
+                timeframe.interval === interval,
+        );
+
+        if (!supportedInterval) {
+            throw new Error(
+                'A supported Upstox V3 candle unit and interval are required.',
+            );
         }
 
         // 4. Check the token only after input validation.
@@ -61,7 +73,7 @@ export class UpstoxHistoricalCandleProvider {
         // 5. Build the historical-candle request.
         const url = new URL(
             `${BASE_URL}/historical-candle/` +
-            `${encodeURIComponent(instrumentKey)}/minutes/${interval}/` +
+            `${encodeURIComponent(instrumentKey)}/${unit}/${interval}/` +
             `${toDate}/${fromDate}`,
         );
 

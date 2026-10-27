@@ -31,6 +31,7 @@ describe('MarketHistoryService', () => {
     const loadPromise = service.loadCandles({
       source: 'upstox',
       instrument: 'NIFTY50',
+      timeframe: '15m',
       fromDate: '2026-10-23',
       toDate: '2026-10-23',
     });
@@ -43,6 +44,7 @@ describe('MarketHistoryService', () => {
           url.pathname === '/api/market/candles' &&
           url.searchParams.get('source') === 'upstox' &&
           url.searchParams.get('instrument') === 'NIFTY50' &&
+          url.searchParams.get('timeframe') === '15m' &&
           url.searchParams.get('fromDate') === '2026-10-23' &&
           url.searchParams.get('toDate') === '2026-10-23'
         );
@@ -62,6 +64,7 @@ describe('MarketHistoryService', () => {
     const loadPromise = service.loadCandles({
       source: 'upstox',
       instrument: 'XAU/USD',
+      timeframe: '15m',
       fromDate: '2026-10-23',
       toDate: '2026-10-23',
     });
@@ -77,5 +80,19 @@ describe('MarketHistoryService', () => {
     await loadPromise;
 
     expect(service.error()).toBe('Unsupported historical instrument.');
+  });
+
+  it('rejects an Upstox request without a timeframe', async () => {
+    await service.loadCandles({
+      source: 'upstox',
+      instrument: 'NIFTY50',
+      fromDate: '2026-10-23',
+      toDate: '2026-10-23',
+    });
+
+    expect(service.error()).toContain('timeframe');
+    httpTestingController.expectNone(
+      request => request.url === 'http://localhost:3000/api/market/candles',
+    );
   });
 });

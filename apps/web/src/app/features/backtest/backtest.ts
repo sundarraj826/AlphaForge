@@ -135,13 +135,14 @@ export class BacktestHome {
     await this._marketHistoryService.loadCandles({
       source: 'upstox',
       instrument: strategy.instrument,
+      timeframe: strategy.timeframe,
       fromDate: this.formatDate(this.startDate),
       toDate: this.formatDate(this.endDate),
     });
 
     // Check the error before reading the candles.
     if (this._marketHistoryService.error()) {
-      console.error(this._marketHistoryService.error());
+      this.validationMessage = this._marketHistoryService.error();
       return;
     }
 

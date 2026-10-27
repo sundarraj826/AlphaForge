@@ -98,6 +98,7 @@ describe('Backtest', () => {
     expect(marketHistoryService.loadCandles).toHaveBeenCalledWith({
       source: 'upstox',
       instrument: 'NIFTY50',
+      timeframe: '15m',
       fromDate: '2026-01-01',
       toDate: '2026-01-01',
     });
@@ -114,6 +115,24 @@ describe('Backtest', () => {
     );
     expect(component.backtestResult).toBe(result);
     expect(component.validationMessage).toBeNull();
+  });
+
+  it('displays historical API errors and does not run the backtest', async () => {
+    marketHistoryService.loadCandles.mockImplementation(async () => {
+      marketHistoryService.error.set(
+        'The selected timeframe supports up to 1 month of Upstox historical data.',
+      );
+    });
+
+    await component.runBacktest();
+    fixture.detectChanges();
+
+    expect(component.validationMessage).toContain(
+      'supports up to 1 month of Upstox historical data',
+    );
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent)
+      .toContain('supports up to 1 month');
+    expect(backtestingService.runBacktest).not.toHaveBeenCalled();
   });
 
   it.each(['FOREX', 'CRYPTO', 'INDIAN_EQUITY_DELIVERY'] as const)(
