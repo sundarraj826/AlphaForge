@@ -91,6 +91,18 @@ limit price, and order risk check unavailable. It does not submit orders or
 call broker APIs. Candle delay and freshness settings are heuristic and require
 provider/session confirmation before actionable use.
 
+The reusable NSE equity session-calendar policy currently supports only `15m`
+candles. Other intervals, including `1H`, `4H`, and `1D`, are rejected until
+their session-alignment behavior is established. It accepts injected calendar
+data with an `Asia/Kolkata` timezone, named session templates, and explicit
+date entries marked `TRADING`, `HOLIDAY`, or `UNKNOWN`. Trading entries
+reference one template or provide inline session times, but not both. Missing
+dates, unknown/holiday dates, out-of-session or unaligned candles, and candles
+that cross a supplied session boundary are rejected. No production holiday or
+special-session data is bundled; the policy's tests use synthetic fixtures
+only. This calendar check does not establish candle finality, which remains a
+separate required injected policy.
+
 Paper-proposal persistence is separate from order intents. Configure
 `ALPHAFORGE_PAPER_PROPOSALS_DB_PATH` as an absolute SQLite path outside the
 repository before creating a paper-proposal store. The database records
