@@ -494,4 +494,5 @@ test('repeated runs preserve the original persisted proposal', async t => {
     assert.equal(repeated.status, 'PERSISTED');
     assert.equal(repeated.created, false);
     assert.deepEqual(repeated.proposal, first.proposal);
+    assert.equal(store.list().proposals.length, 1);
 });
