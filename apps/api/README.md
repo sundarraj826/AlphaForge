@@ -72,8 +72,8 @@ exact local Angular origin described above.
 
 `GET /api/orders/:id` remains unauthenticated and read-only for the local order
 lookup UI. It is reachable only through the loopback-bound API, but other
-processes running as the same user can access it. The API continues to use the
-Upstox Sandbox host and existing Sandbox credential checks.
+processes running as the same user can access it. Order lookup and submission
+use the Upstox Sandbox host and existing Sandbox credential checks.
 
 The standalone candle eligibility helper is not connected to strategy
 execution or order submission. It validates ordered, unique candle timestamps,
@@ -90,6 +90,24 @@ with a reference close, but deliberately marks orderable instrument, quantity,
 limit price, and order risk check unavailable. It does not submit orders or
 call broker APIs. Candle delay and freshness settings are heuristic and require
 provider/session confirmation before actionable use.
+
+The server-side paper-proposal generation service accepts an explicitly
+injected historical candle provider, requires at least the strategy's minimum
+history, validates candle data, and persists only valid paper proposals.
+Generation is not triggered by an HTTP route or scheduler. Callers must provide
+an explicit candle provider, exchange calendar policy, and batch candle-finality
+policy. The repository does not establish Upstox finalization semantics or
+provide verified production calendar data. Missing or inconclusive policies
+fail closed. The existing time-based eligibility check is a heuristic and is
+not proof of provider finality.
+
+All Upstox network access must remain on the Sandbox host. No Sandbox
+historical-candle endpoint is verified in this repository, so the historical
+candle provider is disabled, `source=upstox` requests to the market-candles
+route return `503`, and the manual historical-data probe exits disabled. Do not
+use the production Upstox market-data host or guess a Sandbox endpoint. The
+mock market-candles source remains available. Generation tests use injected
+mock candles; no generation route or automatic trigger is configured.
 
 The reusable NSE equity session-calendar policy currently supports only `15m`
 candles. Other intervals, including `1H`, `4H`, and `1D`, are rejected until

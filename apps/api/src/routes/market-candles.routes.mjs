@@ -1,13 +1,9 @@
 
 import { MockMarketCandleProvider } from '../services/market-candle-provider.mjs';
-import {
-    UpstoxHistoricalCandleProvider,
-} from '../services/upstox-historical-candle-provider.mjs';
 import { UPSTOX_HISTORICAL_INSTRUMENT_KEYS } from '../config/upstox-instruments.mjs';
 import { UPSTOX_HISTORICAL_TIMEFRAMES } from '../config/upstox-timeframes.mjs';
 
 const mockProvider = new MockMarketCandleProvider();
-const historicalProvider = new UpstoxHistoricalCandleProvider();
 
 function sendJson(response, statusCode, body) {
     response.writeHead(statusCode, {
@@ -21,7 +17,6 @@ function sendJson(response, statusCode, body) {
 export async function handleMarketCandles(
     request,
     response,
-    { historicalProvider: provider = historicalProvider } = {},
 ) {
     try {
         const url = new URL(
@@ -72,8 +67,6 @@ export async function handleMarketCandles(
         }
 
         const {
-            unit,
-            interval,
             earliestAvailableDate,
             maxLookbackMonths,
         } =
@@ -129,18 +122,10 @@ export async function handleMarketCandles(
             });
         }
 
-        const candles = await provider.getHistoricalCandles({
-            instrumentKey,
-            unit,
-            interval,
-            fromDate,
-            toDate,
-        });
-
-        return sendJson(response, 200, {
-            status: 'success',
-            source: 'upstox',
-            data: { candles },
+        return sendJson(response, 503, {
+            status: 'error',
+            message:
+                'Upstox historical candles are disabled because no Sandbox endpoint is verified.',
         });
     } catch (error) {
         // Do not expose tokens or raw upstream response details.

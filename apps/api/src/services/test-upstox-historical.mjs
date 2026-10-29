@@ -1,25 +1,21 @@
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 
-import 'dotenv/config';
+export function runHistoricalCandleProbe() {
+    throw new Error(
+        'Historical candle probe is disabled because no Sandbox endpoint is verified.',
+    );
+}
 
-import {
-    UpstoxHistoricalCandleProvider,
-} from './upstox-historical-candle-provider.mjs';
+const invokedPath = process.argv[1]
+    ? pathToFileURL(resolve(process.argv[1])).href
+    : null;
 
-const provider = new UpstoxHistoricalCandleProvider();
-
-try {
-    const candles = await provider.getHistoricalCandles({
-        instrumentKey: 'NSE_INDEX|Nifty 50',
-        unit: 'minutes',
-        interval: 5,
-        fromDate: '2026-10-26',
-        toDate: '2026-10-26',
-    });
-
-    console.log('Historical API request succeeded.');
-    console.log('Candle count:', candles.length);
-    console.log('First candle:', candles[0] ?? 'No candles returned');
-} catch (error) {
-    console.error('Historical API test failed:', error.message);
-    process.exitCode = 1;
+if (invokedPath === import.meta.url) {
+    try {
+        runHistoricalCandleProbe();
+    } catch (error) {
+        console.error(error.message);
+        process.exitCode = 1;
+    }
 }

@@ -72,18 +72,18 @@ test('GET /api/market/candles returns valid OHLC values', async (t) => {
     }
 });
 
-for (const [timeframe, unit, interval] of [
-    ['1m', 'minutes', 1],
-    ['5m', 'minutes', 5],
-    ['15m', 'minutes', 15],
-    ['1H', 'hours', 1],
-    ['4H', 'hours', 4],
-    ['1D', 'days', 1],
+for (const timeframe of [
+    '1m',
+    '5m',
+    '15m',
+    '1H',
+    '4H',
+    '1D',
 ]) {
-    test(`maps ${timeframe} to its explicit Upstox V3 interval`, async () => {
-        let providerOptions;
+    test(`disables ${timeframe} Upstox candles without invoking a provider`, async () => {
         let statusCode;
         let responseBody;
+        let providerCalled = false;
 
         await handleMarketCandles(
             {
@@ -100,22 +100,17 @@ for (const [timeframe, unit, interval] of [
             {
                 historicalProvider: {
                     getHistoricalCandles: async (options) => {
-                        providerOptions = options;
+                        providerCalled = true;
                         return [];
                     },
                 },
             },
         );
 
-        assert.equal(statusCode, 200);
-        assert.deepEqual(providerOptions, {
-            instrumentKey: 'NSE_INDEX|Nifty 50',
-            unit,
-            interval,
-            fromDate: '2026-10-23',
-            toDate: '2026-10-23',
-        });
-        assert.deepEqual(responseBody.data.candles, []);
+        assert.equal(statusCode, 503);
+        assert.equal(responseBody.status, 'error');
+        assert.match(responseBody.message, /no Sandbox endpoint is verified/);
+        assert.equal(providerCalled, false);
     });
 }
 
@@ -223,7 +218,7 @@ for (const [timeframe, earliestDate, dayBefore] of [
     ['1H', '2022-01-01', '2021-12-31'],
     ['1D', '2000-01-01', '1999-12-31'],
 ]) {
-    test(`allows ${timeframe} history beginning on ${earliestDate}`, async () => {
+    test(`validates ${timeframe} history beginning on ${earliestDate} then disables Upstox`, async () => {
         let statusCode;
         let providerCalled = false;
 
@@ -247,8 +242,8 @@ for (const [timeframe, earliestDate, dayBefore] of [
             },
         );
 
-        assert.equal(statusCode, 200);
-        assert.equal(providerCalled, true);
+        assert.equal(statusCode, 503);
+        assert.equal(providerCalled, false);
     });
 
     test(`rejects ${timeframe} history beginning before ${earliestDate}`, async () => {
